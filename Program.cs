@@ -11,16 +11,23 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
         ));
 
 // Add CORS
-// builder.Services.AddCors(options =>
-// {
-//     options.AddPolicy("AllowFrontend", policy =>
-//     {
-//         policy.WithOrigins("http://localhost:3000", "http://localhost:3001")
-//               .AllowAnyMethod()
-//               .AllowAnyHeader()
-//               .AllowCredentials();
-//     });
-// });
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowFrontend", policy =>
+    {
+        policy
+        .WithOrigins(
+                "http://localhost:3000",           // 로컬 개발
+                "http://localhost:3001",           // Next.js 대안 포트
+                "https://*.vercel.app",            // Vercel 배포
+                "https://shooq.live",              // 커스텀 도메인 (있다면)
+                "https://www.shooq.live"           // www 도메인
+            )
+              .AllowAnyMethod()
+              .AllowAnyHeader()
+              .AllowCredentials();
+    });
+});
 
 builder.Services.AddControllers();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
