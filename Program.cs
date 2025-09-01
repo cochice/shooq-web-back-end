@@ -13,19 +13,13 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 // Add CORS
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowFrontend", policy =>
+    options.AddDefaultPolicy(builder =>
     {
-        policy
-        .WithOrigins(
-                "http://localhost:3000",           // 로컬 개발
-                "http://localhost:3001",           // Next.js 대안 포트
-                "https://*.vercel.app",            // Vercel 배포
-                "https://shooq.live",              // 커스텀 도메인 (있다면)
-                "https://www.shooq.live"           // www 도메인
-            )
-              .AllowAnyMethod()
-              .AllowAnyHeader()
-              .AllowCredentials();
+        builder
+            .SetIsOriginAllowed(origin => true) // 모든 오리진 허용
+            .AllowAnyMethod()
+            .AllowAnyHeader()
+            .AllowCredentials();
     });
 });
 
@@ -34,6 +28,9 @@ builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
+
+// 미들웨어 순서 중요!
+app.UseCors(); // 가장 먼저!
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
