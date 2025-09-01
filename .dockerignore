@@ -1,0 +1,17 @@
+# Build results
+bin/
+obj/
+out/
+
+# Visual Studio
+.vs/
+.vscode/
+
+# Git
+.git/
+.gitignore
+
+# Others
+*.md
+Dockerfile
+.dockerignore
