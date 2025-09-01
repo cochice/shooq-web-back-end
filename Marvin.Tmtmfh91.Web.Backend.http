@@ -1,0 +1,6 @@
+@Marvin.Tmtmfh91.Web.Backend_HostAddress = http://localhost:5195
+
+GET {{Marvin.Tmtmfh91.Web.Backend_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

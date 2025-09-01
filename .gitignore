@@ -1,0 +1,43 @@
+# 빌드 결과물
+bin/
+obj/
+
+# Visual Studio
+.vs/
+.vscode/
+
+# User-specific files
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# 환경 설정
+appsettings.json
+appsettings.*.json
+!appsettings.Development.json
+
+# 로그 파일
+*.log
+logs/
+
+# 패키지 파일
+*.nupkg
+*.snupkg
+
+# NuGet 패키지 폴더
+packages/
+
+# 데이터베이스
+*.db
+*.sqlite
+*.sqlite3
+
+# OS 생성 파일
+.DS_Store
+Thumbs.db
+
+# 임시 파일
+*~
+*.tmp
