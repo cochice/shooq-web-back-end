@@ -41,3 +41,4 @@ Thumbs.db
 # 임시 파일
 *~
 *.tmp
+Properties/launchSettings.json
