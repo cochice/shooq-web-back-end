@@ -24,6 +24,17 @@ public class ShoooqController : ControllerBase
         return Ok("Shoooq Controller is working!");
     }
 
+    /// <summary>
+    /// 게시물 목록을 조회합니다.
+    /// </summary>
+    /// <param name="page">페이지 번호 (기본값: 1)</param>
+    /// <param name="pageSize">페이지 크기 (기본값: 10, 최대: 100)</param>
+    /// <param name="site">단일 사이트 필터</param>
+    /// <param name="sites">다중 사이트 필터</param>
+    /// <param name="sortBy">정렬 방식: "latest" (최신순), "views" (조회순), "popular" (인기순), "comments" (댓글순)</param>
+    /// <param name="keyword">검색 키워드</param>
+    /// <param name="author">작성자 필터</param>
+    /// <returns>페이징된 게시물 목록</returns>
     [HttpGet("posts")]
     public async Task<ActionResult<PagedResult<SiteBbsInfo>>> GetPosts(
         int page = 1, 
@@ -71,17 +82,30 @@ public class ShoooqController : ControllerBase
         var totalCount = await query.CountAsync();
         var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
 
-        var posts = sortBy?.ToLower() == "popular"
-            ? await query
-                .OrderByDescending(x => (x.Views ?? 0) + (x.Likes ?? 0) + (x.ReplyNum ?? 0))
+        // 정렬 방식에 따른 쿼리 실행
+        var posts = sortBy?.ToLower() switch
+        {
+            "views" => await query
+                .OrderByDescending(x => x.Views ?? 0)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
-                .ToListAsync()
-            : await query
-                .OrderByDescending(x => x.Date)
+                .ToListAsync(),
+            "popular" => await query
+                .OrderByDescending(x => x.Likes ?? 0)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
-                .ToListAsync();
+                .ToListAsync(),
+            "comments" => await query
+                .OrderByDescending(x => x.ReplyNum ?? 0)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync(),
+            "latest" or _ => (await query.ToListAsync())
+                .OrderByDescending(x => DateTime.TryParse(x.Date, out var date) ? date : DateTime.MinValue)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToList()
+        };
 
         var result = new PagedResult<SiteBbsInfo>
         {
