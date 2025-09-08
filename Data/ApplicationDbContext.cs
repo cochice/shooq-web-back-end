@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Marvin.Tmtmfh91.Web.BackEnd.Models;
+using Marvin.Tmtmfh91.Web.Backend.Models;
 
 namespace Marvin.Tmtmfh91.Web.BackEnd.Data;
 
@@ -11,6 +12,7 @@ public class ApplicationDbContext : DbContext
     }
 
     public DbSet<SiteBbsInfo> SiteBbsInfos { get; set; }
+    public DbSet<WebsiteAccessLog> WebsiteAccessLogs { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -38,6 +40,30 @@ public class ApplicationDbContext : DbContext
             
             entity.HasIndex(e => new { e.Site, e.Content })
                 .HasDatabaseName("ix_site_bbs_info_site_content");
+        });
+
+        modelBuilder.Entity<WebsiteAccessLog>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).ValueGeneratedOnAdd();
+            entity.Property(e => e.IpAddress).IsRequired();
+            entity.Property(e => e.AccessCount).HasDefaultValue(1);
+            entity.Property(e => e.FirstAccessTime)
+                .HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.LastAccessTime)
+                .HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.UpdatedAt)
+                .HasDefaultValueSql("CURRENT_TIMESTAMP");
+            
+            // IP 주소별 검색을 위한 인덱스
+            entity.HasIndex(e => e.IpAddress)
+                .HasDatabaseName("ix_website_access_log_ip");
+            
+            // 날짜별 검색을 위한 인덱스
+            entity.HasIndex(e => e.LastAccessTime)
+                .HasDatabaseName("ix_website_access_log_last_access");
         });
 
         base.OnModelCreating(modelBuilder);

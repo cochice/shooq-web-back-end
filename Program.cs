@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Marvin.Tmtmfh91.Web.BackEnd.Data;
+using Marvin.Tmtmfh91.Web.Backend.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -23,6 +24,9 @@ builder.Services.AddCors(options =>
     });
 });
 
+// Add services
+builder.Services.AddScoped<AccessLogService>();
+
 builder.Services.AddControllers();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
@@ -44,8 +48,8 @@ app.UseHttpsRedirection();
 app.UseAuthorization();
 app.MapControllers();
 
-// 포트는 환경변수 또는 기본값 사용
-var port = Environment.GetEnvironmentVariable("PORT") ?? "10000";
-app.Run($"http://0.0.0.0:{port}");
+// 포트는 환경변수 또는 기본값 사용 (운영용)
+// var port = Environment.GetEnvironmentVariable("PORT") ?? "10000";
+// app.Run($"http://0.0.0.0:{port}");
 
 app.Run();

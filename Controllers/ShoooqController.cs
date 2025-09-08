@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Marvin.Tmtmfh91.Web.BackEnd.Data;
 using Marvin.Tmtmfh91.Web.BackEnd.Models;
+using Marvin.Tmtmfh91.Web.Backend.Services;
 
 namespace Marvin.Tmtmfh91.Web.BackEnd.Controllers;
 
@@ -11,11 +12,13 @@ public class ShoooqController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
     private readonly ILogger<ShoooqController> _logger;
+    private readonly AccessLogService _accessLogService;
 
-    public ShoooqController(ApplicationDbContext context, ILogger<ShoooqController> logger)
+    public ShoooqController(ApplicationDbContext context, ILogger<ShoooqController> logger, AccessLogService accessLogService)
     {
         _context = context;
         _logger = logger;
+        _accessLogService = accessLogService;
     }
 
     [HttpGet("test")]
@@ -161,6 +164,134 @@ public class ShoooqController : ControllerBase
             .ToListAsync();
 
         return Ok(popularPosts);
+    }
+
+    [HttpGet("admin/stats")]
+    public async Task<ActionResult> GetAdminStats()
+    {
+        try
+        {
+            // 총 게시물 수
+            var totalPosts = await _context.SiteBbsInfos.CountAsync();
+            
+            // 활성 사이트 수
+            var activeSites = await _context.SiteBbsInfos
+                .Select(x => x.Site)
+                .Distinct()
+                .CountAsync();
+            
+            // 총 방문자 수
+            var totalVisitors = await _accessLogService.GetTotalVisitorsAsync();
+            
+            // 총 접속 수 (일일 조회수로 사용)
+            var totalAccess = await _accessLogService.GetTotalAccessCountAsync();
+
+            var stats = new
+            {
+                totalPosts,
+                activeSites,
+                totalVisitors,
+                dailyViews = totalAccess, // 총 접속수를 일일 조회수로 사용
+                systemStatus = "정상"
+            };
+
+            return Ok(stats);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting admin stats");
+            return StatusCode(500, new { message = "Internal server error" });
+        }
+    }
+
+    [HttpGet("admin/site-stats")]
+    public async Task<ActionResult> GetSiteStats()
+    {
+        try
+        {
+            var siteStats = await _context.SiteBbsInfos
+                .Where(x => !string.IsNullOrEmpty(x.Site))
+                .GroupBy(x => x.Site)
+                .Select(g => new
+                {
+                    site = g.Key,
+                    postCount = g.Count(),
+                    lastPostDate = g.Max(x => x.RegDate)
+                })
+                .OrderByDescending(x => x.postCount)
+                .ToListAsync();
+
+            return Ok(siteStats);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting site stats");
+            return StatusCode(500, new { message = "Internal server error" });
+        }
+    }
+
+    [HttpGet("admin/recent-posts-by-crawl")]
+    public async Task<ActionResult> GetRecentPostsByCrawlTime(int count = 5)
+    {
+        try
+        {
+            if (count < 1 || count > 50) count = 5;
+
+            var recentPosts = await _context.SiteBbsInfos
+                .OrderByDescending(x => x.RegDate)
+                .Take(count)
+                .Select(x => new
+                {
+                    no = x.No,
+                    title = x.Title,
+                    date = x.Date,
+                    regDate = x.RegDate,
+                    site = x.Site
+                })
+                .ToListAsync();
+
+            return Ok(recentPosts);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting recent posts by crawl time");
+            return StatusCode(500, new { message = "Internal server error" });
+        }
+    }
+
+    [HttpGet("admin/recent-posts-by-content")]
+    public async Task<ActionResult> GetRecentPostsByContentTime(int count = 5)
+    {
+        try
+        {
+            if (count < 1 || count > 50) count = 5;
+
+            var recentPosts = await _context.SiteBbsInfos
+                .Where(x => !string.IsNullOrEmpty(x.Date))
+                .ToListAsync();
+
+            // Date 필드를 DateTime으로 파싱하여 정렬
+            var sortedPosts = recentPosts
+                .Where(x => DateTime.TryParse(x.Date, out _))
+                .OrderByDescending(x => DateTime.Parse(x.Date!))
+                .Take(count)
+                .Select(x => new
+                {
+                    no = x.No,
+                    title = x.Title,
+                    date = x.Date,
+                    regDate = x.RegDate,
+                    site = x.Site
+                })
+                .ToList();
+
+            return Ok(sortedPosts);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting recent posts by content time");
+            return StatusCode(500, new { message = "Internal server error" });
+        }
     }
 }
 
