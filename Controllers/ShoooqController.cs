@@ -171,11 +171,14 @@ public class ShoooqController : ControllerBase
     {
         try
         {
-            // 총 게시물 수
-            var totalPosts = await _context.SiteBbsInfos.CountAsync();
+            // 총 게시물 수 (NaverNews, GoogleNews 제외)
+            var totalPosts = await _context.SiteBbsInfos
+                .Where(x => x.Site != "NaverNews" && x.Site != "GoogleNews")
+                .CountAsync();
             
-            // 활성 사이트 수
+            // 활성 사이트 수 (NaverNews, GoogleNews 제외)
             var activeSites = await _context.SiteBbsInfos
+                .Where(x => x.Site != "NaverNews" && x.Site != "GoogleNews")
                 .Select(x => x.Site)
                 .Distinct()
                 .CountAsync();
@@ -209,13 +212,23 @@ public class ShoooqController : ControllerBase
     {
         try
         {
+            // 오늘 날짜 (UTC)
+            var today = DateTime.UtcNow.Date;
+            var tomorrow = today.AddDays(1);
+            var todayUtc = DateTime.SpecifyKind(today, DateTimeKind.Utc);
+            var tomorrowUtc = DateTime.SpecifyKind(tomorrow, DateTimeKind.Utc);
+
             var siteStats = await _context.SiteBbsInfos
-                .Where(x => !string.IsNullOrEmpty(x.Site))
+                .Where(x => !string.IsNullOrEmpty(x.Site) && 
+                           x.Site != "NaverNews" && x.Site != "GoogleNews")
                 .GroupBy(x => x.Site)
                 .Select(g => new
                 {
                     site = g.Key,
                     postCount = g.Count(),
+                    todayCount = g.Count(x => x.RegDate.HasValue && 
+                                             x.RegDate.Value >= todayUtc && 
+                                             x.RegDate.Value < tomorrowUtc),
                     lastPostDate = g.Max(x => x.RegDate)
                 })
                 .OrderByDescending(x => x.postCount)
@@ -238,6 +251,7 @@ public class ShoooqController : ControllerBase
             if (count < 1 || count > 50) count = 5;
 
             var recentPosts = await _context.SiteBbsInfos
+                .Where(x => x.Site != "NaverNews" && x.Site != "GoogleNews")
                 .OrderByDescending(x => x.RegDate)
                 .Take(count)
                 .Select(x => new
@@ -267,7 +281,8 @@ public class ShoooqController : ControllerBase
             if (count < 1 || count > 50) count = 5;
 
             var recentPosts = await _context.SiteBbsInfos
-                .Where(x => !string.IsNullOrEmpty(x.Date))
+                .Where(x => !string.IsNullOrEmpty(x.Date) && 
+                           x.Site != "NaverNews" && x.Site != "GoogleNews")
                 .ToListAsync();
 
             // Date 필드를 DateTime으로 파싱하여 정렬
@@ -290,6 +305,86 @@ public class ShoooqController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting recent posts by content time");
+            return StatusCode(500, new { message = "Internal server error" });
+        }
+    }
+
+    [HttpGet("admin/weekly-crawl-stats")]
+    public async Task<ActionResult> GetWeeklyCrawlStats()
+    {
+        try
+        {
+            // 현재 시간 기준 최근 7일간의 날짜 생성 (UTC로 변환)
+            var today = DateTime.UtcNow.Date;
+            var weeklyStats = new List<object>();
+
+            for (int i = 6; i >= 0; i--)
+            {
+                var targetDate = today.AddDays(-i);
+                var nextDate = targetDate.AddDays(1);
+
+                // UTC 시간으로 변환하여 비교
+                var targetDateUtc = DateTime.SpecifyKind(targetDate, DateTimeKind.Utc);
+                var nextDateUtc = DateTime.SpecifyKind(nextDate, DateTimeKind.Utc);
+
+                // 해당 날짜에 크롤링된 게시물 개수 계산 (RegDate 기준, NaverNews, GoogleNews 제외)
+                var count = await _context.SiteBbsInfos
+                    .Where(x => x.RegDate.HasValue && 
+                               x.RegDate.Value >= targetDateUtc && 
+                               x.RegDate.Value < nextDateUtc &&
+                               x.Site != "NaverNews" && x.Site != "GoogleNews")
+                    .CountAsync();
+
+                weeklyStats.Add(new
+                {
+                    date = targetDate.ToString("yyyy-MM-dd"),
+                    count = count
+                });
+            }
+
+            return Ok(weeklyStats);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting weekly crawl stats");
+            return StatusCode(500, new { message = "Internal server error" });
+        }
+    }
+
+    [HttpGet("admin/daily-site-stats")]
+    public async Task<ActionResult> GetDailySiteStats()
+    {
+        try
+        {
+            // 오늘 날짜 (UTC)
+            var today = DateTime.UtcNow.Date;
+            var tomorrow = today.AddDays(1);
+
+            // UTC 시간으로 변환
+            var todayUtc = DateTime.SpecifyKind(today, DateTimeKind.Utc);
+            var tomorrowUtc = DateTime.SpecifyKind(tomorrow, DateTimeKind.Utc);
+
+            // 오늘 하루 사이트별 크롤링 개수 (NaverNews, GoogleNews 제외)
+            var siteStats = await _context.SiteBbsInfos
+                .Where(x => x.RegDate.HasValue && 
+                           x.RegDate.Value >= todayUtc && 
+                           x.RegDate.Value < tomorrowUtc &&
+                           !string.IsNullOrEmpty(x.Site) &&
+                           x.Site != "NaverNews" && x.Site != "GoogleNews")
+                .GroupBy(x => x.Site)
+                .Select(g => new
+                {
+                    site = g.Key,
+                    count = g.Count()
+                })
+                .OrderByDescending(x => x.count)
+                .ToListAsync();
+
+            return Ok(siteStats);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting daily site stats");
             return StatusCode(500, new { message = "Internal server error" });
         }
     }
