@@ -9,38 +9,53 @@ public class SiteBbsInfo
     [Key]
     [Column("no")]
     [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
-    public long No { get; set; }
+    public long no { get; set; }
 
     [Column("number")]
-    public long? Number { get; set; }
+    public long? number { get; set; }
 
     [Column("title")]
-    public string? Title { get; set; }
+    public string? title { get; set; }
 
     [Column("author")]
-    public string? Author { get; set; }
+    public string? author { get; set; }
 
     [Column("date")]
-    public string? Date { get; set; }
+    public string? date { get; set; }
 
     [Column("views")]
-    public int? Views { get; set; }
+    public int? views { get; set; }
 
     [Column("likes")]
-    public int? Likes { get; set; }
+    public int? likes { get; set; }
 
     [Column("url")]
-    public string? Url { get; set; }
+    public string? url { get; set; }
 
     [Column("site")]
-    public string? Site { get; set; }
+    public string? site { get; set; }
 
     [Column("reg_date")]
-    public DateTime? RegDate { get; set; }
+    public DateTime? reg_date { get; set; }
 
     [Column("reply_num")]
-    public int? ReplyNum { get; set; }
+    public int? reply_num { get; set; }
 
     [Column("content")]
-    public string? Content { get; set; }
+    public string? content { get; set; }
+
+    [Column("posted_dt")]
+    public string? posted_dt { get; set; }
+
+    [Column("total_count")]
+    public int? total_count { get; set; }
+
+    [Column("score")]
+    public long? score { get; set; }
+
+    [Column("time_bucket")]
+    public string? time_bucket { get; set; }
+
+    [Column("time_bucket_no")]
+    public int? time_bucket_no { get; set; }
 }

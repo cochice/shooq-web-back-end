@@ -3,6 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using Marvin.Tmtmfh91.Web.BackEnd.Data;
 using Marvin.Tmtmfh91.Web.BackEnd.Models;
 using Marvin.Tmtmfh91.Web.Backend.Services;
+using Dapper;
+using Npgsql;
 
 namespace Marvin.Tmtmfh91.Web.BackEnd.Controllers;
 
@@ -13,12 +15,14 @@ public class ShoooqController : ControllerBase
     private readonly ApplicationDbContext _context;
     private readonly ILogger<ShoooqController> _logger;
     private readonly AccessLogService _accessLogService;
+    private readonly IConfiguration _configuration;
 
-    public ShoooqController(ApplicationDbContext context, ILogger<ShoooqController> logger, AccessLogService accessLogService)
+    public ShoooqController(ApplicationDbContext context, ILogger<ShoooqController> logger, AccessLogService accessLogService, IConfiguration configuration)
     {
         _context = context;
         _logger = logger;
         _accessLogService = accessLogService;
+        _configuration = configuration;
     }
 
     [HttpGet("test")]
@@ -40,76 +44,55 @@ public class ShoooqController : ControllerBase
     /// <returns>페이징된 게시물 목록</returns>
     [HttpGet("posts")]
     public async Task<ActionResult<PagedResult<SiteBbsInfo>>> GetPosts(
-        int page = 1, 
-        int pageSize = 10, 
+        int page = 1,
+        int pageSize = 10,
         string? site = null,
         [FromQuery] string[]? sites = null,
         string? sortBy = "latest",
         string? keyword = null,
-        string? author = null)
+        string? author = null,
+        string? isNewsYn = "n")
     {
         if (page < 1) page = 1;
         if (pageSize < 1 || pageSize > 100) pageSize = 10;
 
-        var query = _context.SiteBbsInfos.AsQueryable();
+        using var connection = new NpgsqlConnection(_configuration.GetConnectionString("DefaultConnection"));
+        await connection.OpenAsync();
+        var pageIndex = (page - 1) * pageSize;
+        var dataSql = $@"
+            SELECT
+                score, time_bucket, time_bucket_no,
+                posted_dt, site, reg_date,
+                reply_num, ""no"", ""number"",
+                title, author, ""date"",
+                ""views"", likes, url,
+                content, total_count
+            FROM tmtmfhgi.fetch_site_bbs_info_with_count(@sites, @isNewsYn, @keyword, @pageIndex, @pageSize, NULL)";
 
-        // 키워드 검색
-        if (!string.IsNullOrEmpty(keyword))
+        var parameters = new
         {
-            query = query.Where(x =>
-                (x.Title != null && x.Title.Contains(keyword)) ||
-                (x.Content != null && x.Content.Contains(keyword)));
-        }
-
-        // 작성자 검색
-        if (!string.IsNullOrEmpty(author))
-        {
-            query = query.Where(x => x.Author == author);
-        }
-
-        // 단일 사이트 필터 (기존 호환성)
-        if (!string.IsNullOrEmpty(site))
-        {
-            query = query.Where(x => x.Site == site);
-        }
-        // 다중 사이트 필터 (새로운 기능)
-        else if (sites != null && sites.Length > 0)
-        {
-            var validSites = sites.Where(s => !string.IsNullOrEmpty(s)).ToList();
-            if (validSites.Count > 0)
-            {
-                query = query.Where(x => x.Site != null && validSites.Contains(x.Site));
-            }
-        }
-
-        var totalCount = await query.CountAsync();
-        var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
-
-        // 정렬 방식에 따른 쿼리 실행
-        var posts = sortBy?.ToLower() switch
-        {
-            "views" => await query
-                .OrderByDescending(x => x.Views ?? 0)
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .ToListAsync(),
-            "popular" => await query
-                .OrderByDescending(x => x.Likes ?? 0)
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .ToListAsync(),
-            "comments" => await query
-                .OrderByDescending(x => x.ReplyNum ?? 0)
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .ToListAsync(),
-            "latest" or _ => (await query.ToListAsync())
-                .OrderByDescending(x => DateTime.TryParse(x.Date, out var date) ? date : DateTime.MinValue)
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .ToList()
+            sites = sites,
+            isNewsYn = isNewsYn,
+            keyword = keyword,
+            pageIndex = pageIndex,
+            pageSize = pageSize,
+            //TimeBucket = timeBucket
         };
 
+        Console.WriteLine("--------------------------- Query Debug --------------------------");
+        // 파라미터 로깅
+        _logger.LogInformation("Parameters: Sites={Sites}, IsNewsYn={IsNewsYn}, Keyword={Keyword}, PageIndex={PageIndex}, pageSize={pageSize}",
+            sites == null ? "NULL" : string.Join(",", sites),
+            isNewsYn ?? "NULL",
+            keyword ?? "NULL",
+            pageIndex,
+            pageSize);
+        Console.WriteLine(dataSql);
+        Console.WriteLine("---------------------------------------------------------------");
+
+        var posts = await connection.QueryAsync<SiteBbsInfo>(dataSql, parameters); //total_count
+        var totalCount = posts.FirstOrDefault()?.total_count ?? 0;
+        var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
         var result = new PagedResult<SiteBbsInfo>
         {
             Data = posts,
@@ -128,7 +111,7 @@ public class ShoooqController : ControllerBase
     public async Task<ActionResult<SiteBbsInfo>> GetPost(long no)
     {
         var post = await _context.SiteBbsInfos
-            .FirstOrDefaultAsync(x => x.No == no);
+            .FirstOrDefaultAsync(x => x.no == no);
 
         if (post == null)
         {
@@ -141,12 +124,16 @@ public class ShoooqController : ControllerBase
     [HttpGet("sites")]
     public async Task<ActionResult<IEnumerable<string>>> GetSites()
     {
-        var sites = await _context.SiteBbsInfos
-            .Where(x => !string.IsNullOrEmpty(x.Site))
-            .Select(x => x.Site!)
-            .Distinct()
-            .OrderBy(x => x)
-            .ToListAsync();
+        using var connection = new NpgsqlConnection(_configuration.GetConnectionString("DefaultConnection"));
+        await connection.OpenAsync();
+
+        var sql = @"
+            SELECT DISTINCT site
+            FROM tmtmfhgi.site_bbs_info
+            WHERE site IS NOT NULL AND site != ''
+            ORDER BY site";
+
+        var sites = await connection.QueryAsync<string>(sql);
 
         return Ok(sites);
     }
@@ -158,8 +145,8 @@ public class ShoooqController : ControllerBase
         if (count < 1 || count > 50) count = 10;
 
         var popularPosts = await _context.SiteBbsInfos
-            .Where(x => x.Views.HasValue || x.Likes.HasValue)
-            .OrderByDescending(x => (x.Views ?? 0) + (x.Likes ?? 0) * 10)
+            .Where(x => x.views.HasValue || x.likes.HasValue)
+            .OrderByDescending(x => (x.views ?? 0) + (x.likes ?? 0) * 10)
             .Take(count)
             .ToListAsync();
 
@@ -173,19 +160,19 @@ public class ShoooqController : ControllerBase
         {
             // 총 게시물 수 (NaverNews, GoogleNews 제외)
             var totalPosts = await _context.SiteBbsInfos
-                .Where(x => x.Site != "NaverNews" && x.Site != "GoogleNews")
+                .Where(x => x.site != "NaverNews" && x.site != "GoogleNews")
                 .CountAsync();
-            
+
             // 활성 사이트 수 (NaverNews, GoogleNews 제외)
             var activeSites = await _context.SiteBbsInfos
-                .Where(x => x.Site != "NaverNews" && x.Site != "GoogleNews")
-                .Select(x => x.Site)
+                .Where(x => x.site != "NaverNews" && x.site != "GoogleNews")
+                .Select(x => x.site)
                 .Distinct()
                 .CountAsync();
-            
+
             // 총 방문자 수
             var totalVisitors = await _accessLogService.GetTotalVisitorsAsync();
-            
+
             // 총 접속 수 (일일 조회수로 사용)
             var totalAccess = await _accessLogService.GetTotalAccessCountAsync();
 
@@ -219,17 +206,17 @@ public class ShoooqController : ControllerBase
             var tomorrowUtc = DateTime.SpecifyKind(tomorrow, DateTimeKind.Utc);
 
             var siteStats = await _context.SiteBbsInfos
-                .Where(x => !string.IsNullOrEmpty(x.Site) && 
-                           x.Site != "NaverNews" && x.Site != "GoogleNews")
-                .GroupBy(x => x.Site)
+                .Where(x => !string.IsNullOrEmpty(x.site) &&
+                           x.site != "NaverNews" && x.site != "GoogleNews")
+                .GroupBy(x => x.site)
                 .Select(g => new
                 {
                     site = g.Key,
                     postCount = g.Count(),
-                    todayCount = g.Count(x => x.RegDate.HasValue && 
-                                             x.RegDate.Value >= todayUtc && 
-                                             x.RegDate.Value < tomorrowUtc),
-                    lastPostDate = g.Max(x => x.RegDate)
+                    todayCount = g.Count(x => x.reg_date.HasValue &&
+                                             x.reg_date.Value >= todayUtc &&
+                                             x.reg_date.Value < tomorrowUtc),
+                    lastPostDate = g.Max(x => x.reg_date)
                 })
                 .OrderByDescending(x => x.postCount)
                 .ToListAsync();
@@ -251,16 +238,16 @@ public class ShoooqController : ControllerBase
             if (count < 1 || count > 50) count = 5;
 
             var recentPosts = await _context.SiteBbsInfos
-                .Where(x => x.Site != "NaverNews" && x.Site != "GoogleNews")
-                .OrderByDescending(x => x.RegDate)
+                .Where(x => x.site != "NaverNews" && x.site != "GoogleNews")
+                .OrderByDescending(x => x.reg_date)
                 .Take(count)
                 .Select(x => new
                 {
-                    no = x.No,
-                    title = x.Title,
-                    date = x.Date,
-                    regDate = x.RegDate,
-                    site = x.Site
+                    no = x.no,
+                    title = x.title,
+                    date = x.date,
+                    regDate = x.reg_date,
+                    site = x.site
                 })
                 .ToListAsync();
 
@@ -281,22 +268,22 @@ public class ShoooqController : ControllerBase
             if (count < 1 || count > 50) count = 5;
 
             var recentPosts = await _context.SiteBbsInfos
-                .Where(x => !string.IsNullOrEmpty(x.Date) && 
-                           x.Site != "NaverNews" && x.Site != "GoogleNews")
+                .Where(x => !string.IsNullOrEmpty(x.date) &&
+                           x.site != "NaverNews" && x.site != "GoogleNews")
                 .ToListAsync();
 
             // Date 필드를 DateTime으로 파싱하여 정렬
             var sortedPosts = recentPosts
-                .Where(x => DateTime.TryParse(x.Date, out _))
-                .OrderByDescending(x => DateTime.Parse(x.Date!))
+                .Where(x => DateTime.TryParse(x.date, out _))
+                .OrderByDescending(x => DateTime.Parse(x.date!))
                 .Take(count)
                 .Select(x => new
                 {
-                    no = x.No,
-                    title = x.Title,
-                    date = x.Date,
-                    regDate = x.RegDate,
-                    site = x.Site
+                    no = x.no,
+                    title = x.title,
+                    date = x.date,
+                    regDate = x.reg_date,
+                    site = x.site
                 })
                 .ToList();
 
@@ -329,10 +316,10 @@ public class ShoooqController : ControllerBase
 
                 // 해당 날짜에 크롤링된 게시물 개수 계산 (RegDate 기준, NaverNews, GoogleNews 제외)
                 var count = await _context.SiteBbsInfos
-                    .Where(x => x.RegDate.HasValue && 
-                               x.RegDate.Value >= targetDateUtc && 
-                               x.RegDate.Value < nextDateUtc &&
-                               x.Site != "NaverNews" && x.Site != "GoogleNews")
+                    .Where(x => x.reg_date.HasValue &&
+                               x.reg_date.Value >= targetDateUtc &&
+                               x.reg_date.Value < nextDateUtc &&
+                               x.site != "NaverNews" && x.site != "GoogleNews")
                     .CountAsync();
 
                 weeklyStats.Add(new
@@ -366,12 +353,12 @@ public class ShoooqController : ControllerBase
 
             // 오늘 하루 사이트별 크롤링 개수 (NaverNews, GoogleNews 제외)
             var siteStats = await _context.SiteBbsInfos
-                .Where(x => x.RegDate.HasValue && 
-                           x.RegDate.Value >= todayUtc && 
-                           x.RegDate.Value < tomorrowUtc &&
-                           !string.IsNullOrEmpty(x.Site) &&
-                           x.Site != "NaverNews" && x.Site != "GoogleNews")
-                .GroupBy(x => x.Site)
+                .Where(x => x.reg_date.HasValue &&
+                           x.reg_date.Value >= todayUtc &&
+                           x.reg_date.Value < tomorrowUtc &&
+                           !string.IsNullOrEmpty(x.site) &&
+                           x.site != "NaverNews" && x.site != "GoogleNews")
+                .GroupBy(x => x.site)
                 .Select(g => new
                 {
                     site = g.Key,

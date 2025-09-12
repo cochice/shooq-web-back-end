@@ -18,28 +18,14 @@ public class ApplicationDbContext : DbContext
     {
         modelBuilder.Entity<SiteBbsInfo>(entity =>
         {
-            entity.HasKey(e => e.No);
-            entity.Property(e => e.No).ValueGeneratedOnAdd();
-            entity.Property(e => e.RegDate)
+            entity.HasKey(e => e.no);
+            entity.Property(e => e.no).ValueGeneratedOnAdd();
+            entity.Property(e => e.reg_date)
                 .HasDefaultValueSql("(now() AT TIME ZONE 'Asia/Seoul')");
-            
-            // LIKE 검색 성능 향상을 위한 인덱스
-            entity.HasIndex(e => e.Title)
-                .HasDatabaseName("ix_site_bbs_info_title");
-            
-            entity.HasIndex(e => e.Content)
-                .HasDatabaseName("ix_site_bbs_info_content");
-            
-            // 복합 검색을 위한 인덱스 (title, content 동시 검색)
-            entity.HasIndex(e => new { e.Title, e.Content })
-                .HasDatabaseName("ix_site_bbs_info_title_content");
-            
-            // 사이트별 검색을 위한 복합 인덱스
-            entity.HasIndex(e => new { e.Site, e.Title })
-                .HasDatabaseName("ix_site_bbs_info_site_title");
-            
-            entity.HasIndex(e => new { e.Site, e.Content })
-                .HasDatabaseName("ix_site_bbs_info_site_content");
+
+            // 기본적인 검색 인덱스
+            entity.HasIndex(e => e.site);
+            entity.HasIndex(e => e.reg_date);
         });
 
         modelBuilder.Entity<WebsiteAccessLog>(entity =>
@@ -56,14 +42,9 @@ public class ApplicationDbContext : DbContext
                 .HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(e => e.UpdatedAt)
                 .HasDefaultValueSql("CURRENT_TIMESTAMP");
-            
-            // IP 주소별 검색을 위한 인덱스
-            entity.HasIndex(e => e.IpAddress)
-                .HasDatabaseName("ix_website_access_log_ip");
-            
-            // 날짜별 검색을 위한 인덱스
-            entity.HasIndex(e => e.LastAccessTime)
-                .HasDatabaseName("ix_website_access_log_last_access");
+
+            // 필수 인덱스만 유지
+            entity.HasIndex(e => e.IpAddress);
         });
 
         base.OnModelCreating(modelBuilder);
