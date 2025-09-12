@@ -53,58 +53,79 @@ public class ShoooqController : ControllerBase
         string? author = null,
         string? isNewsYn = "n")
     {
-        if (page < 1) page = 1;
-        if (pageSize < 1 || pageSize > 100) pageSize = 10;
-
-        using var connection = new NpgsqlConnection(_configuration.GetConnectionString("DefaultConnection"));
-        await connection.OpenAsync();
-        var pageIndex = (page - 1) * pageSize;
-        var dataSql = $@"
-            SELECT
-                score, time_bucket, time_bucket_no,
-                posted_dt, site, reg_date,
-                reply_num, ""no"", ""number"",
-                title, author, ""date"",
-                ""views"", likes, url,
-                content, total_count
-            FROM tmtmfhgi.fetch_site_bbs_info_with_count(@sites, @isNewsYn, @keyword, @pageIndex, @pageSize, NULL)";
-
-        var parameters = new
+        try
         {
-            sites = sites,
-            isNewsYn = isNewsYn,
-            keyword = keyword,
-            pageIndex = pageIndex,
-            pageSize = pageSize,
-            //TimeBucket = timeBucket
-        };
+            if (page < 1) page = 1;
+            if (pageSize < 1 || pageSize > 100) pageSize = 10;
 
-        Console.WriteLine("--------------------------- Query Debug --------------------------");
-        // 파라미터 로깅
-        _logger.LogInformation("Parameters: Sites={Sites}, IsNewsYn={IsNewsYn}, Keyword={Keyword}, PageIndex={PageIndex}, pageSize={pageSize}",
-            sites == null ? "NULL" : string.Join(",", sites),
-            isNewsYn ?? "NULL",
-            keyword ?? "NULL",
-            pageIndex,
-            pageSize);
-        Console.WriteLine(dataSql);
-        Console.WriteLine("---------------------------------------------------------------");
+            // sortBy 파라미터를 timeBucket으로 변환
+            string? timeBucket = sortBy switch
+            {
+                "1h" => "1h",
+                "6h" => "6h", 
+                "12h" => "12h",
+                "1d" => "1d",
+                "latest" => null,
+                "views" => null,
+                "popular" => null,
+                "comments" => null,
+                _ => null
+            };
 
-        var posts = await connection.QueryAsync<SiteBbsInfo>(dataSql, parameters); //total_count
-        var totalCount = posts.FirstOrDefault()?.total_count ?? 0;
-        var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
-        var result = new PagedResult<SiteBbsInfo>
+            var connectionString = Environment.GetEnvironmentVariable("DATABASE_URL") ?? 
+                                  _configuration.GetConnectionString("DefaultConnection");
+            using var connection = new NpgsqlConnection(connectionString);
+            await connection.OpenAsync();
+            var pageIndex = (page - 1) * pageSize;
+            var dataSql = $@"
+                SELECT
+                    score, time_bucket, time_bucket_no,
+                    posted_dt, site, reg_date,
+                    reply_num, ""no"", ""number"",
+                    title, author, ""date"",
+                    ""views"", likes, url,
+                    content, total_count
+                FROM tmtmfhgi.fetch_site_bbs_info_with_count(@sites, @isNewsYn, @keyword, @pageIndex, @pageSize, @timeBucket)";
+
+            var parameters = new
+            {
+                sites = sites,
+                isNewsYn = isNewsYn,
+                keyword = keyword,
+                pageIndex = pageIndex,
+                pageSize = pageSize,
+                timeBucket = timeBucket
+            };
+
+            _logger.LogInformation("API Call: /api/posts - Parameters: Sites={Sites}, IsNewsYn={IsNewsYn}, Keyword={Keyword}, PageIndex={PageIndex}, PageSize={PageSize}, TimeBucket={TimeBucket}",
+                sites == null ? "NULL" : string.Join(",", sites),
+                isNewsYn ?? "NULL",
+                keyword ?? "NULL",
+                pageIndex,
+                pageSize,
+                timeBucket ?? "NULL");
+
+            var posts = await connection.QueryAsync<SiteBbsInfo>(dataSql, parameters);
+            var totalCount = posts.FirstOrDefault()?.total_count ?? 0;
+            var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+            var result = new PagedResult<SiteBbsInfo>
+            {
+                Data = posts,
+                Page = page,
+                PageSize = pageSize,
+                TotalCount = totalCount,
+                TotalPages = totalPages,
+                HasNextPage = page < totalPages,
+                HasPreviousPage = page > 1
+            };
+
+            return Ok(result);
+        }
+        catch (Exception ex)
         {
-            Data = posts,
-            Page = page,
-            PageSize = pageSize,
-            TotalCount = totalCount,
-            TotalPages = totalPages,
-            HasNextPage = page < totalPages,
-            HasPreviousPage = page > 1
-        };
-
-        return Ok(result);
+            _logger.LogError(ex, "Error in GetPosts API: {Message}", ex.Message);
+            return StatusCode(500, new { message = "Internal server error", details = ex.Message });
+        }
     }
 
     [HttpGet("{no:long}")]
@@ -124,7 +145,9 @@ public class ShoooqController : ControllerBase
     [HttpGet("sites")]
     public async Task<ActionResult<IEnumerable<string>>> GetSites()
     {
-        using var connection = new NpgsqlConnection(_configuration.GetConnectionString("DefaultConnection"));
+        var connectionString = Environment.GetEnvironmentVariable("DATABASE_URL") ?? 
+                              _configuration.GetConnectionString("DefaultConnection");
+        using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
 
         var sql = @"

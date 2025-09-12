@@ -16,11 +16,24 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy
-            .WithOrigins("https://www.shooq.live", "http://localhost:3000", "https://localhost:3000")
-            .AllowAnyMethod()
-            .AllowAnyHeader()
-            .AllowCredentials();
+        if (builder.Environment.IsDevelopment())
+        {
+            // Development - allow localhost
+            policy
+                .WithOrigins("http://localhost:3000", "https://localhost:3000")
+                .AllowAnyMethod()
+                .AllowAnyHeader()
+                .AllowCredentials();
+        }
+        else
+        {
+            // Production - allow specific domains
+            policy
+                .WithOrigins("https://www.shooq.live")
+                .AllowAnyMethod()
+                .AllowAnyHeader()
+                .AllowCredentials();
+        }
     });
 });
 
@@ -36,6 +49,30 @@ var app = builder.Build();
 // 미들웨어 순서 중요!
 app.UseCors("AllowFrontend"); // 가장 먼저!
 
+// Global exception handling
+app.UseExceptionHandler(errorApp =>
+{
+    errorApp.Run(async context =>
+    {
+        context.Response.StatusCode = 500;
+        context.Response.ContentType = "application/json";
+
+        var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+        var exceptionHandlerPathFeature = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerPathFeature>();
+
+        if (exceptionHandlerPathFeature?.Error != null)
+        {
+            logger.LogError(exceptionHandlerPathFeature.Error, "Global exception handler caught error");
+        }
+
+        await context.Response.WriteAsync(System.Text.Json.JsonSerializer.Serialize(new
+        {
+            message = "Internal server error",
+            timestamp = DateTime.UtcNow
+        }));
+    });
+});
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
@@ -47,7 +84,7 @@ app.UseAuthorization();
 app.MapControllers();
 
 // 포트는 환경변수 또는 기본값 사용 (운영용)
-// var port = Environment.GetEnvironmentVariable("PORT") ?? "10000";
-// app.Run($"http://0.0.0.0:{port}");
+var port = Environment.GetEnvironmentVariable("PORT") ?? "10000";
+app.Run($"http://0.0.0.0:{port}");
 
 app.Run();
