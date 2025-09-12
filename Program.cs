@@ -14,10 +14,10 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 // Add CORS
 builder.Services.AddCors(options =>
 {
-    options.AddDefaultPolicy(builder =>
+    options.AddPolicy("AllowFrontend", policy =>
     {
-        builder
-            .SetIsOriginAllowed(origin => true) // 모든 오리진 허용
+        policy
+            .WithOrigins("https://www.shooq.live", "http://localhost:3000", "https://localhost:3000")
             .AllowAnyMethod()
             .AllowAnyHeader()
             .AllowCredentials();
@@ -34,14 +34,12 @@ builder.Services.AddOpenApi();
 var app = builder.Build();
 
 // 미들웨어 순서 중요!
-app.UseCors(); // 가장 먼저!
+app.UseCors("AllowFrontend"); // 가장 먼저!
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
-    // Use CORS in development
-    app.UseCors("AllowFrontend");
 }
 
 app.UseHttpsRedirection();
