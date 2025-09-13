@@ -62,7 +62,7 @@ public class ShoooqController : ControllerBase
             string? timeBucket = sortBy switch
             {
                 "1h" => "1h",
-                "6h" => "6h", 
+                "6h" => "6h",
                 "12h" => "12h",
                 "1d" => "1d",
                 "latest" => null,
@@ -72,7 +72,7 @@ public class ShoooqController : ControllerBase
                 _ => null
             };
 
-            var connectionString = Environment.GetEnvironmentVariable("DATABASE_URL") ?? 
+            var connectionString = Environment.GetEnvironmentVariable("DATABASE_URL") ??
                                   _configuration.GetConnectionString("DefaultConnection");
             using var connection = new NpgsqlConnection(connectionString);
             await connection.OpenAsync();
@@ -145,7 +145,7 @@ public class ShoooqController : ControllerBase
     [HttpGet("sites")]
     public async Task<ActionResult<IEnumerable<string>>> GetSites()
     {
-        var connectionString = Environment.GetEnvironmentVariable("DATABASE_URL") ?? 
+        var connectionString = Environment.GetEnvironmentVariable("DATABASE_URL") ??
                               _configuration.GetConnectionString("DefaultConnection");
         using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
@@ -291,8 +291,8 @@ public class ShoooqController : ControllerBase
             if (count < 1 || count > 50) count = 5;
 
             var recentPosts = await _context.SiteBbsInfos
-                .Where(x => !string.IsNullOrEmpty(x.date) &&
-                           x.site != "NaverNews" && x.site != "GoogleNews")
+                .Where(x => !string.IsNullOrEmpty(x.date) && x.site != "NaverNews" && x.site != "GoogleNews")
+                .Select(x => new { x.no, x.title, x.date, x.reg_date, x.site })
                 .ToListAsync();
 
             // Date 필드를 DateTime으로 파싱하여 정렬
