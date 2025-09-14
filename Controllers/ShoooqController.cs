@@ -200,7 +200,7 @@ public class ShoooqController : ControllerBase
                             ELSE 999
                         END AS time_bucket_no
                     FROM tmtmfhgi.site_bbs_info s
-                    WHERE (array_length(@p_sites, 1) IS NULL OR s.site = ANY(@p_sites))
+                    WHERE (array_length(@p_sites, 1) IS NULL OR array_length(@p_sites, 1) = 0 OR s.site = ANY(@p_sites))
                       AND (
                           @p_keyword IS NULL OR @p_keyword = ''
                           OR s.title ILIKE '%' || @p_keyword || '%'
