@@ -55,6 +55,16 @@ public class AccessLogService
         return await _context.WebsiteAccessLogs.SumAsync(log => log.AccessCount);
     }
 
+    public async Task<int> GetTodayVisitorsAsync()
+    {
+        var today = DateTime.UtcNow.Date;
+        var tomorrow = today.AddDays(1);
+
+        return await _context.WebsiteAccessLogs
+            .Where(log => log.LastAccessTime >= today && log.LastAccessTime < tomorrow)
+            .CountAsync();
+    }
+
     public async Task<List<WebsiteAccessLog>> GetRecentAccessLogsAsync(int count = 10)
     {
         return await _context.WebsiteAccessLogs

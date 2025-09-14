@@ -196,6 +196,9 @@ public class ShoooqController : ControllerBase
             // 총 방문자 수
             var totalVisitors = await _accessLogService.GetTotalVisitorsAsync();
 
+            // 오늘 방문자 수
+            var todayVisitors = await _accessLogService.GetTodayVisitorsAsync();
+
             // 총 접속 수 (일일 조회수로 사용)
             var totalAccess = await _accessLogService.GetTotalAccessCountAsync();
 
@@ -204,6 +207,7 @@ public class ShoooqController : ControllerBase
                 totalPosts,
                 activeSites,
                 totalVisitors,
+                todayVisitors,
                 dailyViews = totalAccess, // 총 접속수를 일일 조회수로 사용
                 systemStatus = "정상"
             };
