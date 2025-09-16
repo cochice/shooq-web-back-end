@@ -297,6 +297,232 @@ public class ShoooqController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// 게시물 목록을 조회합니다. (Prepared Statement 방식)
+    /// </summary>
+    /// <param name="page">페이지 번호 (기본값: 1)</param>
+    /// <param name="pageSize">페이지 크기 (기본값: 10, 최대: 100)</param>
+    /// <param name="site">단일 사이트 필터</param>
+    /// <param name="sites">다중 사이트 필터</param>
+    /// <param name="sortBy">정렬 방식: "latest" (최신순), "views" (조회순), "popular" (인기순), "comments" (댓글순)</param>
+    /// <param name="keyword">검색 키워드</param>
+    /// <param name="author">작성자 필터</param>
+    /// <returns>페이징된 게시물 목록</returns>
+    [HttpGet("posts-main")]
+    public async Task<ActionResult<MainPagedResult<SiteBbsInfo>>> GetPostsMain(
+        string? keyword = null,
+        string? author = null,
+        string? isNewsYn = "n")
+    {
+        try
+        {
+            var connectionString = Environment.GetEnvironmentVariable("DATABASE_URL") ?? _configuration.GetConnectionString("DefaultConnection");
+            using var connection = new NpgsqlConnection(connectionString);
+            await connection.OpenAsync();
+
+            #region [ Query ]
+
+            var sql = @"
+                (
+                SELECT
+                    s.""no"",
+                    s.""number"",
+                    s.title,
+                    s.author,
+                    s.""date"",
+                    s.""views"",
+                    s.likes,
+                    s.url,
+                    s.site,
+                    s.reg_date,
+                    s.reply_num,
+                    s.""content"",
+                    s.posted_dt,
+                    '1h' AS time_bucket,
+                    (
+                        COALESCE(s.likes, 0) * 10
+                        + COALESCE(s.reply_num, 0) * 3
+                        + CASE WHEN s.site = '82Cook' THEN (COALESCE(s.""views"", 0) / 1000) ELSE COALESCE(s.""views"", 0) END
+                    ) AS score
+                FROM tmtmfhgi.site_bbs_info s
+                WHERE s.posted_dt >= timezone('Asia/Seoul', CURRENT_TIMESTAMP) - INTERVAL '1 hour'
+                AND (
+                    @p_keyword IS NULL OR @p_keyword = ''
+                    OR s.title ILIKE '%' || @p_keyword || '%'
+                    OR s.""content"" ILIKE '%' || @p_keyword || '%'
+                )
+                AND (@p_is_news_yn != 'n' OR s.site NOT IN ('NaverNews', 'GoogleNews'))
+                ORDER BY (
+                    COALESCE(s.likes, 0) * 10
+                    + COALESCE(s.reply_num, 0) * 3
+                    + CASE WHEN s.site = '82Cook' THEN (COALESCE(s.""views"", 0) / 1000) ELSE COALESCE(s.""views"", 0) END
+                ) DESC
+                LIMIT 5
+                )
+                UNION ALL
+                (
+                SELECT
+                    s.""no"",
+                    s.""number"",
+                    s.title,
+                    s.author,
+                    s.""date"",
+                    s.""views"",
+                    s.likes,
+                    s.url,
+                    s.site,
+                    s.reg_date,
+                    s.reply_num,
+                    s.""content"",
+                    s.posted_dt,
+                    '3h' AS time_bucket,
+                    (
+                        COALESCE(s.likes, 0) * 10
+                        + COALESCE(s.reply_num, 0) * 3
+                        + CASE WHEN s.site = '82Cook' THEN (COALESCE(s.""views"", 0) / 1000) ELSE COALESCE(s.""views"", 0) END
+                    ) AS score
+                FROM tmtmfhgi.site_bbs_info s
+                WHERE s.posted_dt < timezone('Asia/Seoul', CURRENT_TIMESTAMP) - INTERVAL '1 hour' AND s.posted_dt >= timezone('Asia/Seoul', CURRENT_TIMESTAMP) - INTERVAL '3 hour'
+                AND (
+                    @p_keyword IS NULL OR @p_keyword = ''
+                    OR s.title ILIKE '%' || @p_keyword || '%'
+                    OR s.""content"" ILIKE '%' || @p_keyword || '%'
+                )
+                AND (@p_is_news_yn != 'n' OR s.site NOT IN ('NaverNews', 'GoogleNews'))
+                ORDER BY (
+                    COALESCE(s.likes, 0) * 10
+                    + COALESCE(s.reply_num, 0) * 3
+                    + CASE WHEN s.site = '82Cook' THEN (COALESCE(s.""views"", 0) / 1000) ELSE COALESCE(s.""views"", 0) END
+                ) DESC
+                LIMIT 5
+                )
+                UNION ALL
+                (
+                SELECT
+                    s.""no"",
+                    s.""number"",
+                    s.title,
+                    s.author,
+                    s.""date"",
+                    s.""views"",
+                    s.likes,
+                    s.url,
+                    s.site,
+                    s.reg_date,
+                    s.reply_num,
+                    s.""content"",
+                    s.posted_dt,
+                    '9h' AS time_bucket,
+                    (
+                        COALESCE(s.likes, 0) * 10
+                        + COALESCE(s.reply_num, 0) * 3
+                        + CASE WHEN s.site = '82Cook' THEN (COALESCE(s.""views"", 0) / 1000) ELSE COALESCE(s.""views"", 0) END
+                    ) AS score
+                FROM tmtmfhgi.site_bbs_info s
+                WHERE s.posted_dt < timezone('Asia/Seoul', CURRENT_TIMESTAMP) - INTERVAL '3 hour' AND s.posted_dt >= timezone('Asia/Seoul', CURRENT_TIMESTAMP) - INTERVAL '9 hour'
+                AND (
+                    @p_keyword IS NULL OR @p_keyword = ''
+                    OR s.title ILIKE '%' || @p_keyword || '%'
+                    OR s.""content"" ILIKE '%' || @p_keyword || '%'
+                )
+                AND (@p_is_news_yn != 'n' OR s.site NOT IN ('NaverNews', 'GoogleNews'))
+                ORDER BY (
+                    COALESCE(s.likes, 0) * 10
+                    + COALESCE(s.reply_num, 0) * 3
+                    + CASE WHEN s.site = '82Cook' THEN (COALESCE(s.""views"", 0) / 1000) ELSE COALESCE(s.""views"", 0) END
+                ) DESC
+                LIMIT 5
+                )
+                UNION ALL
+                (
+                SELECT
+                    s.""no"",
+                    s.""number"",
+                    s.title,
+                    s.author,
+                    s.""date"",
+                    s.""views"",
+                    s.likes,
+                    s.url,
+                    s.site,
+                    s.reg_date,
+                    s.reply_num,
+                    s.""content"",
+                    s.posted_dt,
+                    '24h' AS time_bucket,
+                    (
+                        COALESCE(s.likes, 0) * 10
+                        + COALESCE(s.reply_num, 0) * 3
+                        + CASE WHEN s.site = '82Cook' THEN (COALESCE(s.""views"", 0) / 1000) ELSE COALESCE(s.""views"", 0) END
+                    ) AS score
+                FROM tmtmfhgi.site_bbs_info s
+                WHERE s.posted_dt < timezone('Asia/Seoul', CURRENT_TIMESTAMP) - INTERVAL '9 hour' AND s.posted_dt >= timezone('Asia/Seoul', CURRENT_TIMESTAMP) - INTERVAL '24 hour'
+                AND (
+                    @p_keyword IS NULL OR @p_keyword = ''
+                    OR s.title ILIKE '%' || @p_keyword || '%'
+                    OR s.""content"" ILIKE '%' || @p_keyword || '%'
+                )
+                AND (@p_is_news_yn != 'n' OR s.site NOT IN ('NaverNews', 'GoogleNews'))
+                ORDER BY (
+                    COALESCE(s.likes, 0) * 10
+                    + COALESCE(s.reply_num, 0) * 3
+                    + CASE WHEN s.site = '82Cook' THEN (COALESCE(s.""views"", 0) / 1000) ELSE COALESCE(s.""views"", 0) END
+                ) DESC
+                LIMIT 5
+                )
+                ;";
+
+            #endregion
+
+            var parameters = new
+            {
+                p_keyword = string.IsNullOrWhiteSpace(keyword) ? null : keyword,
+                p_is_news_yn = isNewsYn ?? "n"
+            };
+
+            _logger.LogInformation("API Call: /api/posts-ps - Parameters: IsNewsYn={IsNewsYn}, Keyword={Keyword}",
+                isNewsYn ?? "NULL",
+                keyword ?? "NULL");
+
+            var posts = await connection.QueryAsync<dynamic>(sql, parameters);
+            var postsList = posts.ToList();
+
+            // Convert dynamic objects to SiteBbsInfo objects
+            var siteBbsInfos = postsList.Select(p => new SiteBbsInfo
+            {
+                no = (long)p.no,
+                number = p.number != null ? (long?)p.number : null,
+                title = p.title,
+                author = p.author,
+                date = p.date,
+                views = p.views != null ? (int?)Convert.ToInt32(p.views) : null,
+                likes = p.likes != null ? (int?)Convert.ToInt32(p.likes) : null,
+                url = p.url,
+                site = p.site,
+                reg_date = p.reg_date,
+                reply_num = p.reply_num != null ? (int?)Convert.ToInt32(p.reply_num) : null,
+                content = p.content,
+                posted_dt = p.posted_dt?.ToString(),
+                total_count = p.total_count != null ? (int?)Convert.ToInt32(p.total_count) : null,
+                score = p.score != null ? (long?)p.score : null,
+                time_bucket = p.time_bucket,
+                time_bucket_no = p.time_bucket_no != null ? (int?)Convert.ToInt32(p.time_bucket_no) : null
+            }).ToList();
+
+            var result = new MainPagedResult<SiteBbsInfo>
+            {
+                Data = siteBbsInfos,
+            };
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in GetPostsPs API: {Message}", ex.Message);
+            return StatusCode(500, new { message = "Internal server error", details = ex.Message });
+        }
+    }
+
     [HttpGet("{no:long}")]
     public async Task<ActionResult<SiteBbsInfo>> GetPost(long no)
     {
@@ -582,4 +808,9 @@ public class PagedResult<T>
     public int TotalPages { get; set; }
     public bool HasNextPage { get; set; }
     public bool HasPreviousPage { get; set; }
+}
+
+public class MainPagedResult<T>
+{
+    public IEnumerable<T> Data { get; set; } = [];
 }
