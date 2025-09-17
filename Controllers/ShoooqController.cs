@@ -345,7 +345,7 @@ public class ShoooqController : ControllerBase
                         + CASE WHEN s.site = '82Cook' THEN (COALESCE(s.""views"", 0) / 1000) ELSE COALESCE(s.""views"", 0) END
                     ) AS score
                 FROM tmtmfhgi.site_bbs_info s
-                WHERE s.posted_dt >= timezone('Asia/Seoul', CURRENT_TIMESTAMP) - INTERVAL '1 hour'
+                WHERE s.posted_dt >= timezone('Asia/Seoul', CURRENT_TIMESTAMP) - INTERVAL '3 hour'
                 AND (
                     @p_keyword IS NULL OR @p_keyword = ''
                     OR s.title ILIKE '%' || @p_keyword || '%'
@@ -357,7 +357,7 @@ public class ShoooqController : ControllerBase
                     + COALESCE(s.reply_num, 0) * 3
                     + CASE WHEN s.site = '82Cook' THEN (COALESCE(s.""views"", 0) / 1000) ELSE COALESCE(s.""views"", 0) END
                 ) DESC
-                LIMIT 5
+                LIMIT 20
                 )
                 UNION ALL
                 (
@@ -382,7 +382,7 @@ public class ShoooqController : ControllerBase
                         + CASE WHEN s.site = '82Cook' THEN (COALESCE(s.""views"", 0) / 1000) ELSE COALESCE(s.""views"", 0) END
                     ) AS score
                 FROM tmtmfhgi.site_bbs_info s
-                WHERE s.posted_dt < timezone('Asia/Seoul', CURRENT_TIMESTAMP) - INTERVAL '1 hour' AND s.posted_dt >= timezone('Asia/Seoul', CURRENT_TIMESTAMP) - INTERVAL '3 hour'
+                WHERE s.posted_dt < timezone('Asia/Seoul', CURRENT_TIMESTAMP) - INTERVAL '3 hour' AND s.posted_dt >= timezone('Asia/Seoul', CURRENT_TIMESTAMP) - INTERVAL '6 hour'
                 AND (
                     @p_keyword IS NULL OR @p_keyword = ''
                     OR s.title ILIKE '%' || @p_keyword || '%'
@@ -419,7 +419,7 @@ public class ShoooqController : ControllerBase
                         + CASE WHEN s.site = '82Cook' THEN (COALESCE(s.""views"", 0) / 1000) ELSE COALESCE(s.""views"", 0) END
                     ) AS score
                 FROM tmtmfhgi.site_bbs_info s
-                WHERE s.posted_dt < timezone('Asia/Seoul', CURRENT_TIMESTAMP) - INTERVAL '3 hour' AND s.posted_dt >= timezone('Asia/Seoul', CURRENT_TIMESTAMP) - INTERVAL '9 hour'
+                WHERE s.posted_dt < timezone('Asia/Seoul', CURRENT_TIMESTAMP) - INTERVAL '6 hour' AND s.posted_dt >= timezone('Asia/Seoul', CURRENT_TIMESTAMP) - INTERVAL '9 hour'
                 AND (
                     @p_keyword IS NULL OR @p_keyword = ''
                     OR s.title ILIKE '%' || @p_keyword || '%'
