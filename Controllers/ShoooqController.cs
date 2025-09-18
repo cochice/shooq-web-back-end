@@ -394,7 +394,7 @@ public class ShoooqController : ControllerBase
                     + COALESCE(s.reply_num, 0) * 3
                     + CASE WHEN s.site = '82Cook' THEN (COALESCE(s.""views"", 0) / 1000) ELSE COALESCE(s.""views"", 0) END
                 ) DESC
-                LIMIT 5
+                LIMIT 10
                 )
                 UNION ALL
                 (
@@ -431,7 +431,7 @@ public class ShoooqController : ControllerBase
                     + COALESCE(s.reply_num, 0) * 3
                     + CASE WHEN s.site = '82Cook' THEN (COALESCE(s.""views"", 0) / 1000) ELSE COALESCE(s.""views"", 0) END
                 ) DESC
-                LIMIT 5
+                LIMIT 10
                 )
                 UNION ALL
                 (
@@ -468,7 +468,7 @@ public class ShoooqController : ControllerBase
                     + COALESCE(s.reply_num, 0) * 3
                     + CASE WHEN s.site = '82Cook' THEN (COALESCE(s.""views"", 0) / 1000) ELSE COALESCE(s.""views"", 0) END
                 ) DESC
-                LIMIT 5
+                LIMIT 10
                 )
                 ;";
 
