@@ -523,6 +523,136 @@ public class ShoooqController : ControllerBase
         }
     }
 
+    [HttpGet("news")]
+    public async Task<ActionResult<PagedResult<SiteBbsInfo>>> GetNews(
+        int page = 1,
+        int pageSize = 10,
+        string? site = null,
+        [FromQuery] string[]? sites = null,
+        string? sortBy = "latest",
+        string? keyword = null,
+        string? author = null,
+        string? isNewsYn = "n")
+    {
+        try
+        {
+            if (page < 1) page = 1;
+            if (pageSize < 1 || pageSize > 100) pageSize = 10;
+
+            var connectionString = Environment.GetEnvironmentVariable("DATABASE_URL") ??
+                                  _configuration.GetConnectionString("DefaultConnection");
+            using var connection = new NpgsqlConnection(connectionString);
+            await connection.OpenAsync();
+
+            var pageIndex = page - 1;
+
+            var sql = @"
+                WITH filtered AS (
+                    SELECT
+                        s.""no"",
+                        s.""number"",
+                        s.title,
+                        s.author,
+                        s.""date"",
+                        s.""views"",
+                        s.likes,
+                        s.url,
+                        s.site,
+                        s.reg_date,
+                        s.reply_num,
+                        s.""content"",
+                        s.posted_dt
+                    FROM tmtmfhgi.site_bbs_info s
+                    WHERE site IN ('NaverNews', 'GoogleNews')
+                    AND (
+                        @p_keyword IS NULL OR @p_keyword = ''
+                        OR s.title ILIKE '%' || @p_keyword || '%'
+                        OR s.""content"" ILIKE '%' || @p_keyword || '%'
+                    )
+                ),
+                counted AS (
+                    SELECT *, COUNT(*) OVER() as total_count FROM filtered
+                )
+                SELECT
+                    c.posted_dt,
+                    c.site,
+                    c.reg_date,
+                    c.reply_num,
+                    c.""no"",
+                    c.""number"",
+                    c.title,
+                    c.author,
+                    c.""date"",
+                    c.""views"",
+                    c.likes,
+                    c.url,
+                    c.""content"",
+                    c.posted_dt,
+                    c.total_count
+                FROM counted c
+                ORDER BY c.posted_dt DESC
+                OFFSET (@p_page_index * @p_page_count)
+                LIMIT @p_page_count";
+
+            var parameters = new
+            {
+                p_keyword = string.IsNullOrWhiteSpace(keyword) ? null : keyword,
+                p_page_index = pageIndex,
+                p_page_count = pageSize
+            };
+
+            _logger.LogInformation("API Call: /api/posts-ps - Parameters: Keyword={Keyword}, PageIndex={PageIndex}, PageSize={PageSize}",
+                keyword ?? "NULL",
+                pageIndex,
+                pageSize);
+
+            var posts = await connection.QueryAsync<dynamic>(sql, parameters);
+            var postsList = posts.ToList();
+            var totalCount = postsList.FirstOrDefault()?.total_count != null ? Convert.ToInt32(postsList.FirstOrDefault()?.total_count) : 0;
+            var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+
+            // Convert dynamic objects to SiteBbsInfo objects
+            var siteBbsInfos = postsList.Select(p => new SiteBbsInfo
+            {
+                no = (long)p.no,
+                number = p.number != null ? (long?)p.number : null,
+                title = p.title,
+                author = p.author,
+                date = p.date,
+                views = p.views != null ? (int?)Convert.ToInt32(p.views) : null,
+                likes = p.likes != null ? (int?)Convert.ToInt32(p.likes) : null,
+                url = p.url,
+                site = p.site,
+                reg_date = p.reg_date,
+                reply_num = p.reply_num != null ? (int?)Convert.ToInt32(p.reply_num) : null,
+                content = p.content,
+                posted_dt = p.posted_dt?.ToString(),
+                total_count = p.total_count != null ? (int?)Convert.ToInt32(p.total_count) : null,
+                score = p.score != null ? (long?)p.score : null,
+                time_bucket = p.time_bucket,
+                time_bucket_no = p.time_bucket_no != null ? (int?)Convert.ToInt32(p.time_bucket_no) : null
+            }).ToList();
+
+            var result = new PagedResult<SiteBbsInfo>
+            {
+                Data = siteBbsInfos,
+                Page = page,
+                PageSize = pageSize,
+                TotalCount = totalCount,
+                TotalPages = totalPages,
+                HasNextPage = page < totalPages,
+                HasPreviousPage = page > 1
+            };
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in GetPostsPs API: {Message}", ex.Message);
+            return StatusCode(500, new { message = "Internal server error", details = ex.Message });
+        }
+    }
+
     [HttpGet("{no:long}")]
     public async Task<ActionResult<SiteBbsInfo>> GetPost(long no)
     {
@@ -576,17 +706,35 @@ public class ShoooqController : ControllerBase
     {
         try
         {
-            // 총 게시물 수 (NaverNews, GoogleNews 제외)
-            var totalPosts = await _context.SiteBbsInfos
+            // 커뮤니티 게시물 수 (NaverNews, GoogleNews 제외)
+            var communityPosts = await _context.SiteBbsInfos
                 .Where(x => x.site != "NaverNews" && x.site != "GoogleNews")
                 .CountAsync();
 
-            // 활성 사이트 수 (NaverNews, GoogleNews 제외)
-            var activeSites = await _context.SiteBbsInfos
+            // 뉴스 게시물 수 (NaverNews, GoogleNews 포함)
+            var newsPosts = await _context.SiteBbsInfos
+                .Where(x => x.site == "NaverNews" || x.site == "GoogleNews")
+                .CountAsync();
+
+            // 총 게시물 수 (뉴스 포함)
+            var totalPosts = communityPosts + newsPosts;
+
+            // 커뮤니티 활성 사이트 수 (NaverNews, GoogleNews 제외)
+            var communitySites = await _context.SiteBbsInfos
                 .Where(x => x.site != "NaverNews" && x.site != "GoogleNews")
                 .Select(x => x.site)
                 .Distinct()
                 .CountAsync();
+
+            // 뉴스 활성 사이트 수 (NaverNews, GoogleNews 포함)
+            var newsSites = await _context.SiteBbsInfos
+                .Where(x => x.site == "NaverNews" || x.site == "GoogleNews")
+                .Select(x => x.site)
+                .Distinct()
+                .CountAsync();
+
+            // 총 활성 사이트 수 (뉴스 포함)
+            var activeSites = communitySites + newsSites;
 
             // 총 방문자 수
             var totalVisitors = await _accessLogService.GetTotalVisitorsAsync();
@@ -600,7 +748,11 @@ public class ShoooqController : ControllerBase
             var stats = new
             {
                 totalPosts,
+                communityPosts,
+                newsPosts,
                 activeSites,
+                communitySites,
+                newsSites,
                 totalVisitors,
                 todayVisitors,
                 dailyViews = totalAccess, // 총 접속수를 일일 조회수로 사용
@@ -794,6 +946,39 @@ public class ShoooqController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting daily site stats");
+            return StatusCode(500, new { message = "Internal server error" });
+        }
+    }
+
+    [HttpGet("admin/latest-crawl-time")]
+    public async Task<ActionResult> GetLatestCrawlTime()
+    {
+        try
+        {
+            // 오늘 날짜 (UTC)
+            var today = DateTime.UtcNow.Date;
+            var tomorrow = today.AddDays(1);
+
+            // UTC 시간으로 변환
+            var todayUtc = DateTime.SpecifyKind(today, DateTimeKind.Utc);
+            var tomorrowUtc = DateTime.SpecifyKind(tomorrow, DateTimeKind.Utc);
+
+            // 오늘 크롤링된 글 중 가장 최근 reg_date 조회 (NaverNews, GoogleNews 제외)
+            var latestCrawlTime = await _context.SiteBbsInfos
+                .Where(x => x.reg_date.HasValue &&
+                           x.reg_date.Value >= todayUtc &&
+                           x.reg_date.Value < tomorrowUtc &&
+                           !string.IsNullOrEmpty(x.site) &&
+                           x.site != "NaverNews" && x.site != "GoogleNews")
+                .OrderByDescending(x => x.reg_date)
+                .Select(x => x.reg_date)
+                .FirstOrDefaultAsync();
+
+            return Ok(new { latestCrawlTime });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting latest crawl time");
             return StatusCode(500, new { message = "Internal server error" });
         }
     }
