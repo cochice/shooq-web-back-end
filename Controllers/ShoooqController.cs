@@ -134,8 +134,6 @@ public class ShoooqController : ControllerBase
     /// <param name="page">페이지 번호 (기본값: 1)</param>
     /// <param name="pageSize">페이지 크기 (기본값: 10, 최대: 100)</param>
     /// <param name="site">단일 사이트 필터</param>
-    /// <param name="sites">다중 사이트 필터</param>
-    /// <param name="sortBy">정렬 방식: "latest" (최신순), "views" (조회순), "popular" (인기순), "comments" (댓글순)</param>
     /// <param name="keyword">검색 키워드</param>
     /// <param name="author">작성자 필터</param>
     /// <returns>페이징된 게시물 목록</returns>
@@ -144,11 +142,8 @@ public class ShoooqController : ControllerBase
         int page = 1,
         int pageSize = 10,
         string? site = null,
-        [FromQuery] string[]? sites = null,
-        string? sortBy = "latest",
         string? keyword = null,
-        string? author = null,
-        string? isNewsYn = "n")
+        string? author = null)
     {
         try
         {
@@ -161,91 +156,63 @@ public class ShoooqController : ControllerBase
             await connection.OpenAsync();
 
             var pageIndex = page - 1;
-
             var sql = @"
-                WITH filtered AS (
+                WITH current_seoul_time AS (
+                    SELECT timezone('Asia/Seoul', CURRENT_TIMESTAMP) as now_time
+                ),
+                filtered AS (
                     SELECT
-                        s.""no"",
-                        s.""number"",
-                        s.title,
-                        s.author,
-                        s.""date"",
-                        s.""views"",
-                        s.likes,
-                        s.url,
-                        s.site,
-                        s.reg_date,
-                        s.reply_num,
-                        s.""content"",
-                        s.posted_dt,
+                        s.""no"", s.""number"", s.title, s.author, s.""date"", s.""views"",
+                        s.likes, s.url, s.site, s.reg_date, s.reply_num, s.""content"", s.posted_dt,
                         (
                             COALESCE(s.likes, 0) * 10
                             + COALESCE(s.reply_num, 0) * 3
-                            + CASE WHEN s.site = '82Cook' THEN (COALESCE(s.""views"", 0) / 1000) ELSE COALESCE(s.""views"", 0) END
+                            + CASE WHEN s.site = '82Cook'
+                                THEN (COALESCE(s.""views"", 0) / 1000)
+                                ELSE COALESCE(s.""views"", 0) END
                         ) AS score,
                         CASE
-                            WHEN s.posted_dt >= timezone('Asia/Seoul', CURRENT_TIMESTAMP) - INTERVAL '1 hour' THEN '1h'
-                            WHEN s.posted_dt >= timezone('Asia/Seoul', CURRENT_TIMESTAMP) - INTERVAL '3 hours' THEN '3h'
-                            WHEN s.posted_dt >= timezone('Asia/Seoul', CURRENT_TIMESTAMP) - INTERVAL '9 hours' THEN '9h'
-                            WHEN s.posted_dt >= timezone('Asia/Seoul', CURRENT_TIMESTAMP) - INTERVAL '24 hours' THEN '24h'
-                            WHEN s.posted_dt >= timezone('Asia/Seoul', CURRENT_TIMESTAMP) - INTERVAL '7 days' THEN '7d'
-                            ELSE 'OLD'
-                        END AS time_bucket,
-                        CASE
-                            WHEN s.posted_dt >= timezone('Asia/Seoul', CURRENT_TIMESTAMP) - INTERVAL '1 hour' THEN 1
-                            WHEN s.posted_dt >= timezone('Asia/Seoul', CURRENT_TIMESTAMP) - INTERVAL '3 hours' THEN 3
-                            WHEN s.posted_dt >= timezone('Asia/Seoul', CURRENT_TIMESTAMP) - INTERVAL '9 hours' THEN 9
-                            WHEN s.posted_dt >= timezone('Asia/Seoul', CURRENT_TIMESTAMP) - INTERVAL '24 hours' THEN 24
-                            WHEN s.posted_dt >= timezone('Asia/Seoul', CURRENT_TIMESTAMP) - INTERVAL '7 days' THEN 700
+                            WHEN s.posted_dt >= cst.now_time - INTERVAL '1 hour' THEN 1
+                            WHEN s.posted_dt >= cst.now_time - INTERVAL '3 hours' THEN 3
+                            WHEN s.posted_dt >= cst.now_time - INTERVAL '9 hours' THEN 9
+                            WHEN s.posted_dt >= cst.now_time - INTERVAL '24 hours' THEN 24
+                            WHEN s.posted_dt >= cst.now_time - INTERVAL '7 days' THEN 700
                             ELSE 999
                         END AS time_bucket_no
                     FROM tmtmfhgi.site_bbs_info s
-                    WHERE (array_length(@p_sites, 1) IS NULL OR array_length(@p_sites, 1) = 0 OR s.site = ANY(@p_sites))
-                      AND (
-                          @p_keyword IS NULL OR @p_keyword = ''
-                          OR s.title ILIKE '%' || @p_keyword || '%'
-                          OR s.""content"" ILIKE '%' || @p_keyword || '%'
-                      )
-                      AND (@p_is_news_yn != 'n' OR s.site NOT IN ('NaverNews', 'GoogleNews'))
+                    CROSS JOIN current_seoul_time cst
+                    WHERE (@p_site IS NULL OR @p_site = '' OR s.site = @p_site)
+                        AND s.site NOT IN ('NaverNews', 'GoogleNews')
+                        AND (
+                            @p_keyword IS NULL OR @p_keyword = ''
+                            OR s.title ILIKE '%' || @p_keyword || '%'
+                            OR s.""content"" ILIKE '%' || @p_keyword || '%'
+                        )
                 ),
                 counted AS (
-                    SELECT *, COUNT(*) OVER() as total_count FROM filtered
+                    SELECT *, COUNT(*) OVER() as total_count
+                    FROM filtered
                 )
                 SELECT
-                    c.score,
-                    c.time_bucket,
-                    c.time_bucket_no,
-                    c.posted_dt,
-                    c.site,
-                    c.reg_date,
-                    c.reply_num,
-                    c.""no"",
-                    c.""number"",
-                    c.title,
-                    c.author,
-                    c.""date"",
-                    c.""views"",
-                    c.likes,
-                    c.url,
-                    c.""content"",
-                    c.total_count
+                    c.score, c.time_bucket_no, c.posted_dt, c.site, c.reg_date, c.reply_num,
+                    c.""no"", c.""number"", c.title, c.author, c.""date"", c.""views"", c.likes,
+                    c.url, c.""content"", c.total_count
                 FROM counted c
                 ORDER BY c.time_bucket_no ASC, c.score DESC
                 OFFSET (@p_page_index * @p_page_count)
-                LIMIT @p_page_count";
+                LIMIT @p_page_count
+            ";
 
             var parameters = new
             {
-                p_sites = sites ?? new string[0],
+                p_site = site,
                 p_keyword = string.IsNullOrWhiteSpace(keyword) ? null : keyword,
-                p_is_news_yn = isNewsYn ?? "n",
                 p_page_index = pageIndex,
                 p_page_count = pageSize
             };
 
-            _logger.LogInformation("API Call: /api/posts-ps - Parameters: Sites={Sites}, IsNewsYn={IsNewsYn}, Keyword={Keyword}, PageIndex={PageIndex}, PageSize={PageSize}",
-                sites == null ? "NULL" : string.Join(",", sites),
-                isNewsYn ?? "NULL",
+            _logger.LogInformation("API Call: /api/posts - Parameters: Site={site}, Keyword={Keyword}, PageIndex={PageIndex}, PageSize={PageSize}",
+                site,
                 keyword ?? "NULL",
                 pageIndex,
                 pageSize);
