@@ -58,4 +58,7 @@ public class SiteBbsInfo
 
     [Column("time_bucket_no")]
     public int? time_bucket_no { get; set; }
+
+    [Column("gubun")]
+    public string? gubun { get; set; }
 }

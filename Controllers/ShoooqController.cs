@@ -620,6 +620,418 @@ public class ShoooqController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// 게시물 목록을 조회합니다. (Prepared Statement 방식)
+    /// </summary>
+    /// <param name="page">페이지 번호 (기본값: 1)</param>
+    /// <param name="pageSize">페이지 크기 (기본값: 10, 최대: 100)</param>
+    /// <param name="site">단일 사이트 필터</param>
+    /// <param name="sites">다중 사이트 필터</param>
+    /// <param name="sortBy">정렬 방식: "latest" (최신순), "views" (조회순), "popular" (인기순), "comments" (댓글순)</param>
+    /// <param name="keyword">검색 키워드</param>
+    /// <param name="author">작성자 필터</param>
+    /// <returns>페이징된 게시물 목록</returns>
+    [HttpGet("week")]
+    public async Task<ActionResult<MainPagedResult<SiteBbsInfo>>> GetWeek(
+        string? yyyy = null,
+        string? mm = null,
+        string? w = null)
+    {
+        try
+        {
+            int.TryParse(yyyy, out int year);
+            int.TryParse(mm, out int month);
+            int.TryParse(w, out int week);
+            var (startDate, endDate) = year.CalculateWeekRange(month, week);
+
+            var connectionString = Environment.GetEnvironmentVariable("DATABASE_URL") ?? _configuration.GetConnectionString("DefaultConnection");
+            using var connection = new NpgsqlConnection(connectionString);
+            await connection.OpenAsync();
+
+            #region [ Query ]
+
+            var sql = @"
+            (
+                    -- gubun 01@ 전체 사이트 통합 랭킹 (상위 20개)
+                    WITH list AS (
+                        SELECT
+                            s.""no"", s.""number"", s.title, s.author, s.""date"", s.""views"",
+                            s.likes, s.url, s.site, s.reg_date, s.reply_num, s.""content"", s.posted_dt,
+                            (
+                                COALESCE(s.likes, 0) * 10
+                                + (CASE WHEN s.site = 'SlrClub' THEN (COALESCE(s.reply_num, 0) / 1000) ELSE COALESCE(s.reply_num, 0) END) * 3
+                                + (CASE WHEN s.site = '82Cook' THEN (COALESCE(s.""views"", 0) / 1000) ELSE COALESCE(s.""views"", 0) END)
+                            ) AS score
+                        FROM tmtmfhgi.site_bbs_info s
+                        WHERE s.site NOT IN ('NaverNews', 'GoogleNews')
+                            AND s.posted_dt >= @p_startDate
+                            AND s.posted_dt < @p_endDate
+                    )
+                    SELECT
+                        c.score, c.posted_dt, c.site, c.reg_date, c.reply_num,
+                        c.""no"", c.""number"", c.title, c.author, c.""date"", c.""views"", c.likes,
+                        c.url, c.""content"", '01' gubun
+                    FROM list c
+                    ORDER BY c.score DESC
+                    LIMIT 20
+                    )
+                    UNION
+                    (
+                    -- gubun 02@ 각 사이트별 상위 10개씩 (FMKorea)
+                    WITH list AS (
+                        SELECT
+                            s.""no"", s.""number"", s.title, s.author, s.""date"", s.""views"",
+                            s.likes, s.url, s.site, s.reg_date, s.reply_num, s.""content"", s.posted_dt,
+                            (COALESCE(s.likes, 0) * 10) + (COALESCE(s.reply_num, 0) * 3) + COALESCE(s.""views"", 0) score
+                        FROM tmtmfhgi.site_bbs_info s
+                        WHERE s.site = 'FMKorea'
+                            AND s.posted_dt >= @p_startDate
+                            AND s.posted_dt < @p_endDate
+                    )
+                    SELECT
+                        c.score, c.posted_dt, c.site, c.reg_date, c.reply_num,
+                        c.""no"", c.""number"", c.title, c.author, c.""date"", c.""views"", c.likes,
+                        c.url, c.""content"", '02' gubun
+                    FROM list c
+                    ORDER BY (COALESCE(c.likes, 0) * 10) + (COALESCE(c.reply_num, 0) * 3) + COALESCE(c.""views"", 0) DESC
+                    LIMIT 10
+                    )
+                    UNION
+                    (
+                    -- gubun 02@ Humoruniv
+                    WITH list AS (
+                        SELECT
+                            s.""no"", s.""number"", s.title, s.author, s.""date"", s.""views"",
+                            s.likes, s.url, s.site, s.reg_date, s.reply_num, s.""content"", s.posted_dt,
+                            (COALESCE(s.likes, 0) * 10) + (COALESCE(s.reply_num, 0) * 3) + COALESCE(s.""views"", 0) score
+                        FROM tmtmfhgi.site_bbs_info s
+                        WHERE s.site = 'Humoruniv'
+                            AND s.posted_dt >= @p_startDate
+                            AND s.posted_dt < @p_endDate
+                    )
+                    SELECT
+                        c.score, c.posted_dt, c.site, c.reg_date, c.reply_num,
+                        c.""no"", c.""number"", c.title, c.author, c.""date"", c.""views"", c.likes,
+                        c.url, c.""content"", '02' gubun
+                    FROM list c
+                    ORDER BY (COALESCE(c.likes, 0) * 10) + (COALESCE(c.reply_num, 0) * 3) + COALESCE(c.""views"", 0) DESC
+                    LIMIT 10
+                    )
+                    UNION
+                    (
+                    -- gubun 02@ TheQoo
+                    WITH list AS (
+                        SELECT
+                            s.""no"", s.""number"", s.title, s.author, s.""date"", s.""views"",
+                            s.likes, s.url, s.site, s.reg_date, s.reply_num, s.""content"", s.posted_dt,
+                            (COALESCE(s.likes, 0) * 10) + (COALESCE(s.reply_num, 0) * 3) + COALESCE(s.""views"", 0) score
+                        FROM tmtmfhgi.site_bbs_info s
+                        WHERE s.site = 'TheQoo'
+                            AND s.posted_dt >= @p_startDate
+                            AND s.posted_dt < @p_endDate
+                    )
+                    SELECT
+                        c.score, c.posted_dt, c.site, c.reg_date, c.reply_num,
+                        c.""no"", c.""number"", c.title, c.author, c.""date"", c.""views"", c.likes,
+                        c.url, c.""content"", '02' gubun
+                    FROM list c
+                    ORDER BY (COALESCE(c.likes, 0) * 10) + (COALESCE(c.reply_num, 0) * 3) + COALESCE(c.""views"", 0) DESC
+                    LIMIT 10
+                    )
+                    UNION
+                    (
+                    -- gubun 02@ Ppomppu
+                    WITH list AS (
+                        SELECT
+                            s.""no"", s.""number"", s.title, s.author, s.""date"", s.""views"",
+                            s.likes, s.url, s.site, s.reg_date, s.reply_num, s.""content"", s.posted_dt,
+                            (COALESCE(s.likes, 0) * 10) + (COALESCE(s.reply_num, 0) * 3) + COALESCE(s.""views"", 0) score
+                        FROM tmtmfhgi.site_bbs_info s
+                        WHERE s.site = 'Ppomppu'
+                            AND s.posted_dt >= @p_startDate
+                            AND s.posted_dt < @p_endDate
+                    )
+                    SELECT
+                        c.score, c.posted_dt, c.site, c.reg_date, c.reply_num,
+                        c.""no"", c.""number"", c.title, c.author, c.""date"", c.""views"", c.likes,
+                        c.url, c.""content"", '02' gubun
+                    FROM list c
+                    ORDER BY (COALESCE(c.likes, 0) * 10) + (COALESCE(c.reply_num, 0) * 3) + COALESCE(c.""views"", 0) DESC
+                    LIMIT 10
+                    )
+                    UNION
+                    (
+                    -- gubun 02@ Clien
+                    WITH list AS (
+                        SELECT
+                            s.""no"", s.""number"", s.title, s.author, s.""date"", s.""views"",
+                            s.likes, s.url, s.site, s.reg_date, s.reply_num, s.""content"", s.posted_dt,
+                            (COALESCE(s.likes, 0) * 10) + (COALESCE(s.reply_num, 0) * 3) + COALESCE(s.""views"", 0) score
+                        FROM tmtmfhgi.site_bbs_info s
+                        WHERE s.site = 'Clien'
+                            AND s.posted_dt >= @p_startDate
+                            AND s.posted_dt < @p_endDate
+                    )
+                    SELECT
+                        c.score, c.posted_dt, c.site, c.reg_date, c.reply_num,
+                        c.""no"", c.""number"", c.title, c.author, c.""date"", c.""views"", c.likes,
+                        c.url, c.""content"", '02' gubun
+                    FROM list c
+                    ORDER BY (COALESCE(c.likes, 0) * 10) + (COALESCE(c.reply_num, 0) * 3) + COALESCE(c.""views"", 0) DESC
+                    LIMIT 10
+                    )
+                    UNION
+                    (
+                    -- gubun 02@ TodayHumor
+                    WITH list AS (
+                        SELECT
+                            s.""no"", s.""number"", s.title, s.author, s.""date"", s.""views"",
+                            s.likes, s.url, s.site, s.reg_date, s.reply_num, s.""content"", s.posted_dt,
+                            (COALESCE(s.likes, 0) * 10) + (COALESCE(s.reply_num, 0) * 3) + COALESCE(s.""views"", 0) score
+                        FROM tmtmfhgi.site_bbs_info s
+                        WHERE s.site = 'TodayHumor'
+                            AND s.posted_dt >= @p_startDate
+                            AND s.posted_dt < @p_endDate
+                    )
+                    SELECT
+                        c.score, c.posted_dt, c.site, c.reg_date, c.reply_num,
+                        c.""no"", c.""number"", c.title, c.author, c.""date"", c.""views"", c.likes,
+                        c.url, c.""content"", '02' gubun
+                    FROM list c
+                    ORDER BY (COALESCE(c.likes, 0) * 10) + (COALESCE(c.reply_num, 0) * 3) + COALESCE(c.""views"", 0) DESC
+                    LIMIT 10
+                    )
+                    UNION
+                    (
+                    -- gubun 02@ SlrClub
+                    WITH list AS (
+                        SELECT
+                            s.""no"", s.""number"", s.title, s.author, s.""date"", s.""views"",
+                            s.likes, s.url, s.site, s.reg_date, s.reply_num, s.""content"", s.posted_dt,
+                            (COALESCE(s.likes, 0) * 10) + (COALESCE(s.reply_num, 0) * 3) + COALESCE(s.""views"", 0) score
+                        FROM tmtmfhgi.site_bbs_info s
+                        WHERE s.site = 'SlrClub'
+                            AND s.posted_dt >= @p_startDate
+                            AND s.posted_dt < @p_endDate
+                    )
+                    SELECT
+                        c.score, c.posted_dt, c.site, c.reg_date, c.reply_num,
+                        c.""no"", c.""number"", c.title, c.author, c.""date"", c.""views"", c.likes,
+                        c.url, c.""content"", '02' gubun
+                    FROM list c
+                    ORDER BY (COALESCE(c.likes, 0) * 10) + (COALESCE(c.reply_num, 0) * 3) + COALESCE(c.""views"", 0) DESC
+                    LIMIT 10
+                    )
+                    UNION
+                    (
+                    -- gubun 02@ Ruliweb
+                    WITH list AS (
+                        SELECT
+                            s.""no"", s.""number"", s.title, s.author, s.""date"", s.""views"",
+                            s.likes, s.url, s.site, s.reg_date, s.reply_num, s.""content"", s.posted_dt,
+                            (COALESCE(s.likes, 0) * 10) + (COALESCE(s.reply_num, 0) * 3) + COALESCE(s.""views"", 0) score
+                        FROM tmtmfhgi.site_bbs_info s
+                        WHERE s.site = 'Ruliweb'
+                            AND s.posted_dt >= @p_startDate
+                            AND s.posted_dt < @p_endDate
+                    )
+                    SELECT
+                        c.score, c.posted_dt, c.site, c.reg_date, c.reply_num,
+                        c.""no"", c.""number"", c.title, c.author, c.""date"", c.""views"", c.likes,
+                        c.url, c.""content"", '02' gubun
+                    FROM list c
+                    ORDER BY (COALESCE(c.likes, 0) * 10) + (COALESCE(c.reply_num, 0) * 3) + COALESCE(c.""views"", 0) DESC
+                    LIMIT 10
+                    )
+                    UNION
+                    (
+                    -- gubun 02@ 82Cook
+                    WITH list AS (
+                        SELECT
+                            s.""no"", s.""number"", s.title, s.author, s.""date"", s.""views"",
+                            s.likes, s.url, s.site, s.reg_date, s.reply_num, s.""content"", s.posted_dt,
+                            (COALESCE(s.likes, 0) * 10) + (COALESCE(s.reply_num, 0) * 3) + COALESCE(s.""views"", 0) score
+                        FROM tmtmfhgi.site_bbs_info s
+                        WHERE s.site = '82Cook'
+                            AND s.posted_dt >= @p_startDate
+                            AND s.posted_dt < @p_endDate
+                    )
+                    SELECT
+                        c.score, c.posted_dt, c.site, c.reg_date, c.reply_num,
+                        c.""no"", c.""number"", c.title, c.author, c.""date"", c.""views"", c.likes,
+                        c.url, c.""content"", '02' gubun
+                    FROM list c
+                    ORDER BY (COALESCE(c.likes, 0) * 10) + (COALESCE(c.reply_num, 0) * 3) + COALESCE(c.""views"", 0) DESC
+                    LIMIT 10
+                    )
+                    UNION
+                    (
+                    -- gubun 02@ MlbPark
+                    WITH list AS (
+                        SELECT
+                            s.""no"", s.""number"", s.title, s.author, s.""date"", s.""views"",
+                            s.likes, s.url, s.site, s.reg_date, s.reply_num, s.""content"", s.posted_dt,
+                            (COALESCE(s.likes, 0) * 10) + (COALESCE(s.reply_num, 0) * 3) + COALESCE(s.""views"", 0) score
+                        FROM tmtmfhgi.site_bbs_info s
+                        WHERE s.site = 'MlbPark'
+                            AND s.posted_dt >= @p_startDate
+                            AND s.posted_dt < @p_endDate
+                    )
+                    SELECT
+                        c.score, c.posted_dt, c.site, c.reg_date, c.reply_num,
+                        c.""no"", c.""number"", c.title, c.author, c.""date"", c.""views"", c.likes,
+                        c.url, c.""content"", '02' gubun
+                    FROM list c
+                    ORDER BY (COALESCE(c.likes, 0) * 10) + (COALESCE(c.reply_num, 0) * 3) + COALESCE(c.""views"", 0) DESC
+                    LIMIT 10
+                    )
+                    UNION
+                    (
+                    -- gubun 02@ BobaeDream
+                    WITH list AS (
+                        SELECT
+                            s.""no"", s.""number"", s.title, s.author, s.""date"", s.""views"",
+                            s.likes, s.url, s.site, s.reg_date, s.reply_num, s.""content"", s.posted_dt,
+                            (COALESCE(s.likes, 0) * 10) + (COALESCE(s.reply_num, 0) * 3) + COALESCE(s.""views"", 0) score
+                        FROM tmtmfhgi.site_bbs_info s
+                        WHERE s.site = 'BobaeDream'
+                            AND s.posted_dt >= @p_startDate
+                            AND s.posted_dt < @p_endDate
+                    )
+                    SELECT
+                        c.score, c.posted_dt, c.site, c.reg_date, c.reply_num,
+                        c.""no"", c.""number"", c.title, c.author, c.""date"", c.""views"", c.likes,
+                        c.url, c.""content"", '02' gubun
+                    FROM list c
+                    ORDER BY (COALESCE(c.likes, 0) * 10) + (COALESCE(c.reply_num, 0) * 3) + COALESCE(c.""views"", 0) DESC
+                    LIMIT 10
+                    )
+                    UNION
+                    (
+                    -- gubun 02@ Inven
+                    WITH list AS (
+                        SELECT
+                            s.""no"", s.""number"", s.title, s.author, s.""date"", s.""views"",
+                            s.likes, s.url, s.site, s.reg_date, s.reply_num, s.""content"", s.posted_dt,
+                            (COALESCE(s.likes, 0) * 10) + (COALESCE(s.reply_num, 0) * 3) + COALESCE(s.""views"", 0) score
+                        FROM tmtmfhgi.site_bbs_info s
+                        WHERE s.site = 'Inven'
+                            AND s.posted_dt >= @p_startDate
+                            AND s.posted_dt < @p_endDate
+                    )
+                    SELECT
+                        c.score, c.posted_dt, c.site, c.reg_date, c.reply_num,
+                        c.""no"", c.""number"", c.title, c.author, c.""date"", c.""views"", c.likes,
+                        c.url, c.""content"", '02' gubun
+                    FROM list c
+                    ORDER BY (COALESCE(c.likes, 0) * 10) + (COALESCE(c.reply_num, 0) * 3) + COALESCE(c.""views"", 0) DESC
+                    LIMIT 10
+                    )
+                    UNION
+                    (
+                    -- gubun 02@ Damoang
+                    WITH list AS (
+                        SELECT
+                            s.""no"", s.""number"", s.title, s.author, s.""date"", s.""views"",
+                            s.likes, s.url, s.site, s.reg_date, s.reply_num, s.""content"", s.posted_dt,
+                            (COALESCE(s.likes, 0) * 10) + (COALESCE(s.reply_num, 0) * 3) + COALESCE(s.""views"", 0) score
+                        FROM tmtmfhgi.site_bbs_info s
+                        WHERE s.site = 'Damoang'
+                            AND s.posted_dt >= @p_startDate
+                            AND s.posted_dt < @p_endDate
+                    )
+                    SELECT
+                        c.score, c.posted_dt, c.site, c.reg_date, c.reply_num,
+                        c.""no"", c.""number"", c.title, c.author, c.""date"", c.""views"", c.likes,
+                        c.url, c.""content"", '02' gubun
+                    FROM list c
+                    ORDER BY (COALESCE(c.likes, 0) * 10) + (COALESCE(c.reply_num, 0) * 3) + COALESCE(c.""views"", 0) DESC
+                    LIMIT 10
+                )
+                ORDER BY gubun";
+
+            var sql1 = @"
+                    WITH list AS (
+                        SELECT
+                            s.""no"", s.""number"", s.title, s.author, s.""date"", s.""views"",
+                            s.likes, s.url, s.site, s.reg_date, s.reply_num, s.""content"", s.posted_dt,
+                            (
+                                COALESCE(s.likes, 0) * 10
+                                + (CASE WHEN s.site = 'SlrClub' THEN (COALESCE(s.reply_num, 0) / 1000) ELSE COALESCE(s.reply_num, 0) END) * 3
+                                + (CASE WHEN s.site = '82Cook' THEN (COALESCE(s.""views"", 0) / 1000) ELSE COALESCE(s.""views"", 0) END)
+                            ) AS score
+                        FROM tmtmfhgi.site_bbs_info s
+                        WHERE s.site NOT IN ('NaverNews', 'GoogleNews')
+                        AND s.posted_dt >= @p_startDate
+                        AND s.posted_dt < @p_endDate
+                    )
+                    SELECT
+                        c.score, c.posted_dt, c.site, c.reg_date, c.reply_num,
+                        c.""no"", c.""number"", c.title, c.author, c.""date"", c.""views"", c.likes,
+                        c.url, c.""content"", '01' gubun
+                    FROM list c
+                    ORDER BY c.score DESC
+                    LIMIT 20
+            ";
+
+            #endregion
+
+            var parameters = new
+            {
+                // p_startDate = $"{startDate:yyyy-MM-dd} 00:00:00",
+                // p_endDate = $"{endDate:yyyy-MM-dd} 00:00:00"
+
+                p_startDate = startDate,
+                p_endDate = endDate
+            };
+
+            _logger.LogInformation("API Call: /api/week - Parameters: yyyy={yyyy}, mm={mm}, w={w}, StartDate={StartDate}, EndDate={EndDate}",
+                yyyy,
+                mm,
+                w,
+                startDate,
+                endDate);
+
+            var posts = await connection.QueryAsync<dynamic>(sql, parameters);
+            var postsList = posts.ToList();
+
+            // Convert dynamic objects to SiteBbsInfo objects
+            var siteBbsInfos = postsList.Select(p => new SiteBbsInfo
+            {
+                no = (long)p.no,
+                number = p.number != null ? (long?)p.number : null,
+                title = p.title,
+                author = p.author,
+                date = p.date,
+                views = p.views != null ? (int?)Convert.ToInt32(p.views) : null,
+                likes = p.likes != null ? (int?)Convert.ToInt32(p.likes) : null,
+                url = p.url,
+                site = p.site,
+                reg_date = p.reg_date,
+                reply_num = p.reply_num != null ? (int?)Convert.ToInt32(p.reply_num) : null,
+                content = p.content,
+                posted_dt = p.posted_dt?.ToString(),
+                total_count = p.total_count != null ? (int?)Convert.ToInt32(p.total_count) : null,
+                score = p.score != null ? (long?)p.score : null,
+                time_bucket = null,
+                time_bucket_no = null,
+                gubun = p.gubun
+            }).ToList();
+
+            var result = new MainPagedResult<SiteBbsInfo>
+            {
+                Data = siteBbsInfos,
+            };
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in GetPostsPs API: {Message}", ex.Message);
+            return StatusCode(500, new { message = "Internal server error", details = ex.Message });
+        }
+    }
+
     [HttpGet("{no:long}")]
     public async Task<ActionResult<SiteBbsInfo>> GetPost(long no)
     {
@@ -965,4 +1377,50 @@ public class PagedResult<T>
 public class MainPagedResult<T>
 {
     public IEnumerable<T> Data { get; set; } = [];
+}
+
+public static class Util
+{
+    public static (DateTime start, DateTime end) CalculateWeekRange(this int year, int month, int week)
+    {
+        var firstMonday = GetFirstMonday(year, month);
+        var weekStart = firstMonday.AddDays((week - 1) * 7);
+        var weekEnd = weekStart.AddDays(7);
+
+        return (weekStart, weekEnd);
+    }
+
+    public static DateTime GetFirstMondayOfMonth(DateTime date)
+    {
+        var firstOfMonth = new DateTime(date.Year, date.Month, 1);
+        var dayOfWeek = (int)firstOfMonth.DayOfWeek;
+
+        // 일요일이 0이므로, 월요일을 찾기 위해 계산
+        var daysToAdd = dayOfWeek == 0 ? 1 : (8 - dayOfWeek);
+
+        return firstOfMonth.AddDays(daysToAdd);
+    }
+
+    public static int GetFirstMondayDay(int year, int month)
+    {
+        // 해당 달의 1일
+        DateTime firstDay = new DateTime(year, month, 1);
+
+        // 첫 월요일까지 며칠 더해야 하는지 계산
+        int offset = ((int)DayOfWeek.Monday - (int)firstDay.DayOfWeek + 7) % 7;
+
+        // 날짜 반환 (일(day)만)
+        return firstDay.AddDays(offset).Day;
+    }
+
+    public static DateTime GetFirstMonday(int year, int month)
+    {
+        // 해당 달의 1일
+        DateTime firstDay = new DateTime(year, month, 1);
+
+        // 요일 차이 계산 (월요일이 될 때까지 며칠을 더해야 하는지)
+        int offset = ((int)DayOfWeek.Monday - (int)firstDay.DayOfWeek + 7) % 7;
+
+        return firstDay.AddDays(offset);
+    }
 }
