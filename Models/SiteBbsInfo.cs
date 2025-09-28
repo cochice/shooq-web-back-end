@@ -61,4 +61,7 @@ public class SiteBbsInfo
 
     [Column("gubun")]
     public string? gubun { get; set; }
+
+    [Column("cloudinary_url")]
+    public string? cloudinary_url { get; set; }
 }

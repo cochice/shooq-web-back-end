@@ -178,8 +178,9 @@ public class ShoooqController : ControllerBase
                             WHEN s.posted_dt >= cst.now_time - INTERVAL '24 hours' THEN 24
                             WHEN s.posted_dt >= cst.now_time - INTERVAL '7 days' THEN 700
                             ELSE 999
-                        END AS time_bucket_no
+                        END AS time_bucket_no, cloudinary_url
                     FROM tmtmfhgi.site_bbs_info s
+                    LEFT JOIN tmtmfhgi.optimized_images oi ON s.img1 = oi.id 
                     CROSS JOIN current_seoul_time cst
                     WHERE (@p_site IS NULL OR @p_site = '' OR s.site = @p_site)
                         AND s.site NOT IN ('NaverNews', 'GoogleNews')
@@ -196,7 +197,7 @@ public class ShoooqController : ControllerBase
                 SELECT
                     c.score, c.time_bucket_no, c.posted_dt, c.site, c.reg_date, c.reply_num,
                     c.""no"", c.""number"", c.title, c.author, c.""date"", c.""views"", c.likes,
-                    c.url, c.""content"", c.total_count
+                    c.url, c.""content"", c.total_count, c.cloudinary_url
                 FROM counted c
                 ORDER BY c.time_bucket_no ASC, c.score DESC
                 OFFSET (@p_page_index * @p_page_count)
@@ -241,7 +242,8 @@ public class ShoooqController : ControllerBase
                 total_count = p.total_count != null ? (int?)Convert.ToInt32(p.total_count) : null,
                 score = p.score != null ? (long?)p.score : null,
                 time_bucket = p.time_bucket,
-                time_bucket_no = p.time_bucket_no != null ? (int?)Convert.ToInt32(p.time_bucket_no) : null
+                time_bucket_no = p.time_bucket_no != null ? (int?)Convert.ToInt32(p.time_bucket_no) : null,
+                cloudinary_url = p.cloudinary_url
             }).ToList();
 
             var result = new PagedResult<SiteBbsInfo>
@@ -310,8 +312,9 @@ public class ShoooqController : ControllerBase
                         COALESCE(s.likes, 0) * 10
                         + COALESCE(s.reply_num, 0) * 3
                         + CASE WHEN s.site = '82Cook' THEN (COALESCE(s.""views"", 0) / 1000) ELSE COALESCE(s.""views"", 0) END
-                    ) AS score
+                    ) AS score, cloudinary_url
                 FROM tmtmfhgi.site_bbs_info s
+                LEFT JOIN tmtmfhgi.optimized_images oi ON s.img1 = oi.id 
                 WHERE s.posted_dt >= timezone('Asia/Seoul', CURRENT_TIMESTAMP) - INTERVAL '3 hour'
                 AND (
                     @p_keyword IS NULL OR @p_keyword = ''
@@ -347,8 +350,9 @@ public class ShoooqController : ControllerBase
                         COALESCE(s.likes, 0) * 10
                         + COALESCE(s.reply_num, 0) * 3
                         + CASE WHEN s.site = '82Cook' THEN (COALESCE(s.""views"", 0) / 1000) ELSE COALESCE(s.""views"", 0) END
-                    ) AS score
+                    ) AS score, cloudinary_url
                 FROM tmtmfhgi.site_bbs_info s
+                LEFT JOIN tmtmfhgi.optimized_images oi ON s.img1 = oi.id 
                 WHERE s.posted_dt < timezone('Asia/Seoul', CURRENT_TIMESTAMP) - INTERVAL '3 hour' AND s.posted_dt >= timezone('Asia/Seoul', CURRENT_TIMESTAMP) - INTERVAL '6 hour'
                 AND (
                     @p_keyword IS NULL OR @p_keyword = ''
@@ -384,8 +388,9 @@ public class ShoooqController : ControllerBase
                         COALESCE(s.likes, 0) * 10
                         + COALESCE(s.reply_num, 0) * 3
                         + CASE WHEN s.site = '82Cook' THEN (COALESCE(s.""views"", 0) / 1000) ELSE COALESCE(s.""views"", 0) END
-                    ) AS score
+                    ) AS score, cloudinary_url
                 FROM tmtmfhgi.site_bbs_info s
+                LEFT JOIN tmtmfhgi.optimized_images oi ON s.img1 = oi.id 
                 WHERE s.posted_dt < timezone('Asia/Seoul', CURRENT_TIMESTAMP) - INTERVAL '6 hour' AND s.posted_dt >= timezone('Asia/Seoul', CURRENT_TIMESTAMP) - INTERVAL '9 hour'
                 AND (
                     @p_keyword IS NULL OR @p_keyword = ''
@@ -421,8 +426,9 @@ public class ShoooqController : ControllerBase
                         COALESCE(s.likes, 0) * 10
                         + COALESCE(s.reply_num, 0) * 3
                         + CASE WHEN s.site = '82Cook' THEN (COALESCE(s.""views"", 0) / 1000) ELSE COALESCE(s.""views"", 0) END
-                    ) AS score
+                    ) AS score, cloudinary_url
                 FROM tmtmfhgi.site_bbs_info s
+                LEFT JOIN tmtmfhgi.optimized_images oi ON s.img1 = oi.id 
                 WHERE s.posted_dt < timezone('Asia/Seoul', CURRENT_TIMESTAMP) - INTERVAL '9 hour' AND s.posted_dt >= timezone('Asia/Seoul', CURRENT_TIMESTAMP) - INTERVAL '24 hour'
                 AND (
                     @p_keyword IS NULL OR @p_keyword = ''
@@ -473,7 +479,8 @@ public class ShoooqController : ControllerBase
                 total_count = p.total_count != null ? (int?)Convert.ToInt32(p.total_count) : null,
                 score = p.score != null ? (long?)p.score : null,
                 time_bucket = p.time_bucket,
-                time_bucket_no = p.time_bucket_no != null ? (int?)Convert.ToInt32(p.time_bucket_no) : null
+                time_bucket_no = p.time_bucket_no != null ? (int?)Convert.ToInt32(p.time_bucket_no) : null,
+                cloudinary_url = p.cloudinary_url
             }).ToList();
 
             var result = new MainPagedResult<SiteBbsInfo>
@@ -661,8 +668,9 @@ public class ShoooqController : ControllerBase
                                 COALESCE(s.likes, 0) * 10
                                 + (CASE WHEN s.site = 'SlrClub' THEN (COALESCE(s.reply_num, 0) / 1000) ELSE COALESCE(s.reply_num, 0) END) * 3
                                 + (CASE WHEN s.site = '82Cook' THEN (COALESCE(s.""views"", 0) / 1000) ELSE COALESCE(s.""views"", 0) END)
-                            ) AS score
+                            ) AS score, cloudinary_url
                         FROM tmtmfhgi.site_bbs_info s
+                        LEFT JOIN tmtmfhgi.optimized_images oi ON s.img1 = oi.id 
                         WHERE s.site NOT IN ('NaverNews', 'GoogleNews')
                             AND s.posted_dt >= @p_startDate
                             AND s.posted_dt < @p_endDate
@@ -670,7 +678,7 @@ public class ShoooqController : ControllerBase
                     SELECT
                         c.score, c.posted_dt, c.site, c.reg_date, c.reply_num,
                         c.""no"", c.""number"", c.title, c.author, c.""date"", c.""views"", c.likes,
-                        c.url, c.""content"", '01' gubun
+                        c.url, c.""content"", '01' gubun, cloudinary_url
                     FROM list c
                     ORDER BY c.score DESC
                     LIMIT 20
@@ -682,8 +690,10 @@ public class ShoooqController : ControllerBase
                         SELECT
                             s.""no"", s.""number"", s.title, s.author, s.""date"", s.""views"",
                             s.likes, s.url, s.site, s.reg_date, s.reply_num, s.""content"", s.posted_dt,
-                            (COALESCE(s.likes, 0) * 10) + (COALESCE(s.reply_num, 0) * 3) + COALESCE(s.""views"", 0) score
+                            (COALESCE(s.likes, 0) * 10) + (COALESCE(s.reply_num, 0) * 3) + COALESCE(s.""views"", 0) score, 
+                            cloudinary_url
                         FROM tmtmfhgi.site_bbs_info s
+                        LEFT JOIN tmtmfhgi.optimized_images oi ON s.img1 = oi.id 
                         WHERE s.site = 'FMKorea'
                             AND s.posted_dt >= @p_startDate
                             AND s.posted_dt < @p_endDate
@@ -691,7 +701,7 @@ public class ShoooqController : ControllerBase
                     SELECT
                         c.score, c.posted_dt, c.site, c.reg_date, c.reply_num,
                         c.""no"", c.""number"", c.title, c.author, c.""date"", c.""views"", c.likes,
-                        c.url, c.""content"", '02' gubun
+                        c.url, c.""content"", '02' gubun, cloudinary_url
                     FROM list c
                     ORDER BY (COALESCE(c.likes, 0) * 10) + (COALESCE(c.reply_num, 0) * 3) + COALESCE(c.""views"", 0) DESC
                     LIMIT 10
@@ -703,8 +713,9 @@ public class ShoooqController : ControllerBase
                         SELECT
                             s.""no"", s.""number"", s.title, s.author, s.""date"", s.""views"",
                             s.likes, s.url, s.site, s.reg_date, s.reply_num, s.""content"", s.posted_dt,
-                            (COALESCE(s.likes, 0) * 10) + (COALESCE(s.reply_num, 0) * 3) + COALESCE(s.""views"", 0) score
+                            (COALESCE(s.likes, 0) * 10) + (COALESCE(s.reply_num, 0) * 3) + COALESCE(s.""views"", 0) score, cloudinary_url
                         FROM tmtmfhgi.site_bbs_info s
+                        LEFT JOIN tmtmfhgi.optimized_images oi ON s.img1 = oi.id 
                         WHERE s.site = 'Humoruniv'
                             AND s.posted_dt >= @p_startDate
                             AND s.posted_dt < @p_endDate
@@ -712,7 +723,7 @@ public class ShoooqController : ControllerBase
                     SELECT
                         c.score, c.posted_dt, c.site, c.reg_date, c.reply_num,
                         c.""no"", c.""number"", c.title, c.author, c.""date"", c.""views"", c.likes,
-                        c.url, c.""content"", '02' gubun
+                        c.url, c.""content"", '02' gubun, cloudinary_url
                     FROM list c
                     ORDER BY (COALESCE(c.likes, 0) * 10) + (COALESCE(c.reply_num, 0) * 3) + COALESCE(c.""views"", 0) DESC
                     LIMIT 10
@@ -724,8 +735,9 @@ public class ShoooqController : ControllerBase
                         SELECT
                             s.""no"", s.""number"", s.title, s.author, s.""date"", s.""views"",
                             s.likes, s.url, s.site, s.reg_date, s.reply_num, s.""content"", s.posted_dt,
-                            (COALESCE(s.likes, 0) * 10) + (COALESCE(s.reply_num, 0) * 3) + COALESCE(s.""views"", 0) score
+                            (COALESCE(s.likes, 0) * 10) + (COALESCE(s.reply_num, 0) * 3) + COALESCE(s.""views"", 0) score, cloudinary_url
                         FROM tmtmfhgi.site_bbs_info s
+                        LEFT JOIN tmtmfhgi.optimized_images oi ON s.img1 = oi.id 
                         WHERE s.site = 'TheQoo'
                             AND s.posted_dt >= @p_startDate
                             AND s.posted_dt < @p_endDate
@@ -733,7 +745,7 @@ public class ShoooqController : ControllerBase
                     SELECT
                         c.score, c.posted_dt, c.site, c.reg_date, c.reply_num,
                         c.""no"", c.""number"", c.title, c.author, c.""date"", c.""views"", c.likes,
-                        c.url, c.""content"", '02' gubun
+                        c.url, c.""content"", '02' gubun, cloudinary_url
                     FROM list c
                     ORDER BY (COALESCE(c.likes, 0) * 10) + (COALESCE(c.reply_num, 0) * 3) + COALESCE(c.""views"", 0) DESC
                     LIMIT 10
@@ -745,8 +757,9 @@ public class ShoooqController : ControllerBase
                         SELECT
                             s.""no"", s.""number"", s.title, s.author, s.""date"", s.""views"",
                             s.likes, s.url, s.site, s.reg_date, s.reply_num, s.""content"", s.posted_dt,
-                            (COALESCE(s.likes, 0) * 10) + (COALESCE(s.reply_num, 0) * 3) + COALESCE(s.""views"", 0) score
+                            (COALESCE(s.likes, 0) * 10) + (COALESCE(s.reply_num, 0) * 3) + COALESCE(s.""views"", 0) score, cloudinary_url
                         FROM tmtmfhgi.site_bbs_info s
+                        LEFT JOIN tmtmfhgi.optimized_images oi ON s.img1 = oi.id 
                         WHERE s.site = 'Ppomppu'
                             AND s.posted_dt >= @p_startDate
                             AND s.posted_dt < @p_endDate
@@ -754,7 +767,7 @@ public class ShoooqController : ControllerBase
                     SELECT
                         c.score, c.posted_dt, c.site, c.reg_date, c.reply_num,
                         c.""no"", c.""number"", c.title, c.author, c.""date"", c.""views"", c.likes,
-                        c.url, c.""content"", '02' gubun
+                        c.url, c.""content"", '02' gubun, cloudinary_url
                     FROM list c
                     ORDER BY (COALESCE(c.likes, 0) * 10) + (COALESCE(c.reply_num, 0) * 3) + COALESCE(c.""views"", 0) DESC
                     LIMIT 10
@@ -766,8 +779,9 @@ public class ShoooqController : ControllerBase
                         SELECT
                             s.""no"", s.""number"", s.title, s.author, s.""date"", s.""views"",
                             s.likes, s.url, s.site, s.reg_date, s.reply_num, s.""content"", s.posted_dt,
-                            (COALESCE(s.likes, 0) * 10) + (COALESCE(s.reply_num, 0) * 3) + COALESCE(s.""views"", 0) score
+                            (COALESCE(s.likes, 0) * 10) + (COALESCE(s.reply_num, 0) * 3) + COALESCE(s.""views"", 0) score, cloudinary_url
                         FROM tmtmfhgi.site_bbs_info s
+                        LEFT JOIN tmtmfhgi.optimized_images oi ON s.img1 = oi.id 
                         WHERE s.site = 'Clien'
                             AND s.posted_dt >= @p_startDate
                             AND s.posted_dt < @p_endDate
@@ -775,7 +789,7 @@ public class ShoooqController : ControllerBase
                     SELECT
                         c.score, c.posted_dt, c.site, c.reg_date, c.reply_num,
                         c.""no"", c.""number"", c.title, c.author, c.""date"", c.""views"", c.likes,
-                        c.url, c.""content"", '02' gubun
+                        c.url, c.""content"", '02' gubun, cloudinary_url
                     FROM list c
                     ORDER BY (COALESCE(c.likes, 0) * 10) + (COALESCE(c.reply_num, 0) * 3) + COALESCE(c.""views"", 0) DESC
                     LIMIT 10
@@ -787,8 +801,9 @@ public class ShoooqController : ControllerBase
                         SELECT
                             s.""no"", s.""number"", s.title, s.author, s.""date"", s.""views"",
                             s.likes, s.url, s.site, s.reg_date, s.reply_num, s.""content"", s.posted_dt,
-                            (COALESCE(s.likes, 0) * 10) + (COALESCE(s.reply_num, 0) * 3) + COALESCE(s.""views"", 0) score
+                            (COALESCE(s.likes, 0) * 10) + (COALESCE(s.reply_num, 0) * 3) + COALESCE(s.""views"", 0) score, cloudinary_url
                         FROM tmtmfhgi.site_bbs_info s
+                        LEFT JOIN tmtmfhgi.optimized_images oi ON s.img1 = oi.id 
                         WHERE s.site = 'TodayHumor'
                             AND s.posted_dt >= @p_startDate
                             AND s.posted_dt < @p_endDate
@@ -796,7 +811,7 @@ public class ShoooqController : ControllerBase
                     SELECT
                         c.score, c.posted_dt, c.site, c.reg_date, c.reply_num,
                         c.""no"", c.""number"", c.title, c.author, c.""date"", c.""views"", c.likes,
-                        c.url, c.""content"", '02' gubun
+                        c.url, c.""content"", '02' gubun, cloudinary_url
                     FROM list c
                     ORDER BY (COALESCE(c.likes, 0) * 10) + (COALESCE(c.reply_num, 0) * 3) + COALESCE(c.""views"", 0) DESC
                     LIMIT 10
@@ -808,8 +823,9 @@ public class ShoooqController : ControllerBase
                         SELECT
                             s.""no"", s.""number"", s.title, s.author, s.""date"", s.""views"",
                             s.likes, s.url, s.site, s.reg_date, s.reply_num, s.""content"", s.posted_dt,
-                            (COALESCE(s.likes, 0) * 10) + (COALESCE(s.reply_num, 0) * 3) + COALESCE(s.""views"", 0) score
+                            (COALESCE(s.likes, 0) * 10) + (COALESCE(s.reply_num, 0) * 3) + COALESCE(s.""views"", 0) score, cloudinary_url
                         FROM tmtmfhgi.site_bbs_info s
+                        LEFT JOIN tmtmfhgi.optimized_images oi ON s.img1 = oi.id 
                         WHERE s.site = 'SlrClub'
                             AND s.posted_dt >= @p_startDate
                             AND s.posted_dt < @p_endDate
@@ -817,7 +833,7 @@ public class ShoooqController : ControllerBase
                     SELECT
                         c.score, c.posted_dt, c.site, c.reg_date, c.reply_num,
                         c.""no"", c.""number"", c.title, c.author, c.""date"", c.""views"", c.likes,
-                        c.url, c.""content"", '02' gubun
+                        c.url, c.""content"", '02' gubun, cloudinary_url
                     FROM list c
                     ORDER BY (COALESCE(c.likes, 0) * 10) + (COALESCE(c.reply_num, 0) * 3) + COALESCE(c.""views"", 0) DESC
                     LIMIT 10
@@ -829,8 +845,9 @@ public class ShoooqController : ControllerBase
                         SELECT
                             s.""no"", s.""number"", s.title, s.author, s.""date"", s.""views"",
                             s.likes, s.url, s.site, s.reg_date, s.reply_num, s.""content"", s.posted_dt,
-                            (COALESCE(s.likes, 0) * 10) + (COALESCE(s.reply_num, 0) * 3) + COALESCE(s.""views"", 0) score
+                            (COALESCE(s.likes, 0) * 10) + (COALESCE(s.reply_num, 0) * 3) + COALESCE(s.""views"", 0) score, cloudinary_url
                         FROM tmtmfhgi.site_bbs_info s
+                        LEFT JOIN tmtmfhgi.optimized_images oi ON s.img1 = oi.id 
                         WHERE s.site = 'Ruliweb'
                             AND s.posted_dt >= @p_startDate
                             AND s.posted_dt < @p_endDate
@@ -838,7 +855,7 @@ public class ShoooqController : ControllerBase
                     SELECT
                         c.score, c.posted_dt, c.site, c.reg_date, c.reply_num,
                         c.""no"", c.""number"", c.title, c.author, c.""date"", c.""views"", c.likes,
-                        c.url, c.""content"", '02' gubun
+                        c.url, c.""content"", '02' gubun, cloudinary_url
                     FROM list c
                     ORDER BY (COALESCE(c.likes, 0) * 10) + (COALESCE(c.reply_num, 0) * 3) + COALESCE(c.""views"", 0) DESC
                     LIMIT 10
@@ -850,8 +867,9 @@ public class ShoooqController : ControllerBase
                         SELECT
                             s.""no"", s.""number"", s.title, s.author, s.""date"", s.""views"",
                             s.likes, s.url, s.site, s.reg_date, s.reply_num, s.""content"", s.posted_dt,
-                            (COALESCE(s.likes, 0) * 10) + (COALESCE(s.reply_num, 0) * 3) + COALESCE(s.""views"", 0) score
+                            (COALESCE(s.likes, 0) * 10) + (COALESCE(s.reply_num, 0) * 3) + COALESCE(s.""views"", 0) score, cloudinary_url
                         FROM tmtmfhgi.site_bbs_info s
+                        LEFT JOIN tmtmfhgi.optimized_images oi ON s.img1 = oi.id 
                         WHERE s.site = '82Cook'
                             AND s.posted_dt >= @p_startDate
                             AND s.posted_dt < @p_endDate
@@ -859,7 +877,7 @@ public class ShoooqController : ControllerBase
                     SELECT
                         c.score, c.posted_dt, c.site, c.reg_date, c.reply_num,
                         c.""no"", c.""number"", c.title, c.author, c.""date"", c.""views"", c.likes,
-                        c.url, c.""content"", '02' gubun
+                        c.url, c.""content"", '02' gubun, cloudinary_url
                     FROM list c
                     ORDER BY (COALESCE(c.likes, 0) * 10) + (COALESCE(c.reply_num, 0) * 3) + COALESCE(c.""views"", 0) DESC
                     LIMIT 10
@@ -871,8 +889,9 @@ public class ShoooqController : ControllerBase
                         SELECT
                             s.""no"", s.""number"", s.title, s.author, s.""date"", s.""views"",
                             s.likes, s.url, s.site, s.reg_date, s.reply_num, s.""content"", s.posted_dt,
-                            (COALESCE(s.likes, 0) * 10) + (COALESCE(s.reply_num, 0) * 3) + COALESCE(s.""views"", 0) score
+                            (COALESCE(s.likes, 0) * 10) + (COALESCE(s.reply_num, 0) * 3) + COALESCE(s.""views"", 0) score, cloudinary_url
                         FROM tmtmfhgi.site_bbs_info s
+                        LEFT JOIN tmtmfhgi.optimized_images oi ON s.img1 = oi.id 
                         WHERE s.site = 'MlbPark'
                             AND s.posted_dt >= @p_startDate
                             AND s.posted_dt < @p_endDate
@@ -880,7 +899,7 @@ public class ShoooqController : ControllerBase
                     SELECT
                         c.score, c.posted_dt, c.site, c.reg_date, c.reply_num,
                         c.""no"", c.""number"", c.title, c.author, c.""date"", c.""views"", c.likes,
-                        c.url, c.""content"", '02' gubun
+                        c.url, c.""content"", '02' gubun, cloudinary_url
                     FROM list c
                     ORDER BY (COALESCE(c.likes, 0) * 10) + (COALESCE(c.reply_num, 0) * 3) + COALESCE(c.""views"", 0) DESC
                     LIMIT 10
@@ -892,8 +911,9 @@ public class ShoooqController : ControllerBase
                         SELECT
                             s.""no"", s.""number"", s.title, s.author, s.""date"", s.""views"",
                             s.likes, s.url, s.site, s.reg_date, s.reply_num, s.""content"", s.posted_dt,
-                            (COALESCE(s.likes, 0) * 10) + (COALESCE(s.reply_num, 0) * 3) + COALESCE(s.""views"", 0) score
+                            (COALESCE(s.likes, 0) * 10) + (COALESCE(s.reply_num, 0) * 3) + COALESCE(s.""views"", 0) score, cloudinary_url
                         FROM tmtmfhgi.site_bbs_info s
+                        LEFT JOIN tmtmfhgi.optimized_images oi ON s.img1 = oi.id 
                         WHERE s.site = 'BobaeDream'
                             AND s.posted_dt >= @p_startDate
                             AND s.posted_dt < @p_endDate
@@ -901,7 +921,7 @@ public class ShoooqController : ControllerBase
                     SELECT
                         c.score, c.posted_dt, c.site, c.reg_date, c.reply_num,
                         c.""no"", c.""number"", c.title, c.author, c.""date"", c.""views"", c.likes,
-                        c.url, c.""content"", '02' gubun
+                        c.url, c.""content"", '02' gubun, cloudinary_url
                     FROM list c
                     ORDER BY (COALESCE(c.likes, 0) * 10) + (COALESCE(c.reply_num, 0) * 3) + COALESCE(c.""views"", 0) DESC
                     LIMIT 10
@@ -913,8 +933,9 @@ public class ShoooqController : ControllerBase
                         SELECT
                             s.""no"", s.""number"", s.title, s.author, s.""date"", s.""views"",
                             s.likes, s.url, s.site, s.reg_date, s.reply_num, s.""content"", s.posted_dt,
-                            (COALESCE(s.likes, 0) * 10) + (COALESCE(s.reply_num, 0) * 3) + COALESCE(s.""views"", 0) score
+                            (COALESCE(s.likes, 0) * 10) + (COALESCE(s.reply_num, 0) * 3) + COALESCE(s.""views"", 0) score, cloudinary_url
                         FROM tmtmfhgi.site_bbs_info s
+                        LEFT JOIN tmtmfhgi.optimized_images oi ON s.img1 = oi.id 
                         WHERE s.site = 'Inven'
                             AND s.posted_dt >= @p_startDate
                             AND s.posted_dt < @p_endDate
@@ -922,7 +943,7 @@ public class ShoooqController : ControllerBase
                     SELECT
                         c.score, c.posted_dt, c.site, c.reg_date, c.reply_num,
                         c.""no"", c.""number"", c.title, c.author, c.""date"", c.""views"", c.likes,
-                        c.url, c.""content"", '02' gubun
+                        c.url, c.""content"", '02' gubun, cloudinary_url
                     FROM list c
                     ORDER BY (COALESCE(c.likes, 0) * 10) + (COALESCE(c.reply_num, 0) * 3) + COALESCE(c.""views"", 0) DESC
                     LIMIT 10
@@ -934,8 +955,9 @@ public class ShoooqController : ControllerBase
                         SELECT
                             s.""no"", s.""number"", s.title, s.author, s.""date"", s.""views"",
                             s.likes, s.url, s.site, s.reg_date, s.reply_num, s.""content"", s.posted_dt,
-                            (COALESCE(s.likes, 0) * 10) + (COALESCE(s.reply_num, 0) * 3) + COALESCE(s.""views"", 0) score
+                            (COALESCE(s.likes, 0) * 10) + (COALESCE(s.reply_num, 0) * 3) + COALESCE(s.""views"", 0) score, cloudinary_url
                         FROM tmtmfhgi.site_bbs_info s
+                        LEFT JOIN tmtmfhgi.optimized_images oi ON s.img1 = oi.id 
                         WHERE s.site = 'Damoang'
                             AND s.posted_dt >= @p_startDate
                             AND s.posted_dt < @p_endDate
@@ -943,7 +965,7 @@ public class ShoooqController : ControllerBase
                     SELECT
                         c.score, c.posted_dt, c.site, c.reg_date, c.reply_num,
                         c.""no"", c.""number"", c.title, c.author, c.""date"", c.""views"", c.likes,
-                        c.url, c.""content"", '02' gubun
+                        c.url, c.""content"", '02' gubun, cloudinary_url
                     FROM list c
                     ORDER BY (COALESCE(c.likes, 0) * 10) + (COALESCE(c.reply_num, 0) * 3) + COALESCE(c.""views"", 0) DESC
                     LIMIT 10
@@ -1015,7 +1037,8 @@ public class ShoooqController : ControllerBase
                 score = p.score != null ? (long?)p.score : null,
                 time_bucket = null,
                 time_bucket_no = null,
-                gubun = p.gubun
+                gubun = p.gubun,
+                cloudinary_url = p.cloudinary_url,
             }).ToList();
 
             var result = new MainPagedResult<SiteBbsInfo>
