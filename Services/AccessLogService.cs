@@ -8,14 +8,23 @@ namespace Marvin.Tmtmfh91.Web.Backend.Services;
 public class AccessLogService
 {
     private readonly ApplicationDbContext _context;
+    private static readonly TimeZoneInfo KstTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Seoul");
 
     public AccessLogService(ApplicationDbContext context)
     {
         _context = context;
     }
 
+    private DateTime GetKoreanTime()
+    {
+        return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, KstTimeZone);
+    }
+
     public async Task LogAccessAsync(IPAddress ipAddress)
     {
+        var koreanNow = GetKoreanTime();
+        var koreanNowUtc = TimeZoneInfo.ConvertTimeToUtc(koreanNow, KstTimeZone);
+
         var existingLog = await _context.WebsiteAccessLogs
             .FirstOrDefaultAsync(log => log.IpAddress.Equals(ipAddress));
 
@@ -23,8 +32,8 @@ public class AccessLogService
         {
             // 기존 IP 주소인 경우 접속 횟수 증가
             existingLog.AccessCount++;
-            existingLog.LastAccessTime = DateTime.UtcNow;
-            existingLog.UpdatedAt = DateTime.UtcNow;
+            existingLog.LastAccessTime = koreanNowUtc;
+            existingLog.UpdatedAt = koreanNowUtc;
         }
         else
         {
@@ -33,12 +42,12 @@ public class AccessLogService
             {
                 IpAddress = ipAddress,
                 AccessCount = 1,
-                FirstAccessTime = DateTime.UtcNow,
-                LastAccessTime = DateTime.UtcNow,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
+                FirstAccessTime = koreanNowUtc,
+                LastAccessTime = koreanNowUtc,
+                CreatedAt = koreanNowUtc,
+                UpdatedAt = koreanNowUtc
             };
-            
+
             _context.WebsiteAccessLogs.Add(newLog);
         }
 
@@ -57,11 +66,16 @@ public class AccessLogService
 
     public async Task<int> GetTodayVisitorsAsync()
     {
-        var today = DateTime.UtcNow.Date;
+        var koreanNow = GetKoreanTime();
+        var today = koreanNow.Date;
         var tomorrow = today.AddDays(1);
 
+        // 한국 시간을 UTC로 변환하여 데이터베이스 쿼리에서 비교
+        var todayUtc = TimeZoneInfo.ConvertTimeToUtc(today, KstTimeZone);
+        var tomorrowUtc = TimeZoneInfo.ConvertTimeToUtc(tomorrow, KstTimeZone);
+
         return await _context.WebsiteAccessLogs
-            .Where(log => log.LastAccessTime >= today && log.LastAccessTime < tomorrow)
+            .Where(log => log.LastAccessTime >= todayUtc && log.LastAccessTime < tomorrowUtc)
             .CountAsync();
     }
 
@@ -83,21 +97,27 @@ public class AccessLogService
 
     public async Task<Dictionary<string, int>> GetDailyVisitStatsAsync(int days = 7)
     {
-        var startDate = DateTime.UtcNow.Date.AddDays(-days);
-        
+        var koreanNow = GetKoreanTime();
+        var startDate = koreanNow.Date.AddDays(-days);
+        var startDateUtc = TimeZoneInfo.ConvertTimeToUtc(startDate, KstTimeZone);
+
         var stats = await _context.WebsiteAccessLogs
-            .Where(log => log.LastAccessTime >= startDate)
-            .GroupBy(log => log.LastAccessTime.Date)
-            .Select(group => new 
-            { 
-                Date = group.Key, 
-                Count = group.Sum(x => x.AccessCount) 
+            .Where(log => log.LastAccessTime >= startDateUtc)
+            .ToListAsync(); // 먼저 데이터를 가져온 후 클라이언트에서 그룹핑
+
+        // UTC 시간을 한국 시간으로 변환하여 날짜별로 그룹핑
+        var groupedStats = stats
+            .GroupBy(log => TimeZoneInfo.ConvertTimeFromUtc(log.LastAccessTime, KstTimeZone).Date)
+            .Select(group => new
+            {
+                Date = group.Key,
+                Count = group.Sum(x => x.AccessCount)
             })
             .OrderBy(x => x.Date)
-            .ToListAsync();
+            .ToList();
 
-        return stats.ToDictionary(
-            s => s.Date.ToString("yyyy-MM-dd"), 
+        return groupedStats.ToDictionary(
+            s => s.Date.ToString("yyyy-MM-dd"),
             s => s.Count
         );
     }
