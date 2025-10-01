@@ -197,19 +197,20 @@ public class ShoooqController : ControllerBase
                             WHEN s.posted_dt >= cst.now_time - INTERVAL '3 hours' THEN 3
                             WHEN s.posted_dt >= cst.now_time - INTERVAL '9 hours' THEN 9
                             WHEN s.posted_dt >= cst.now_time - INTERVAL '24 hours' THEN 24
-                            WHEN s.posted_dt >= cst.now_time - INTERVAL '7 days' THEN 700
+                            --WHEN s.posted_dt >= cst.now_time - INTERVAL '7 days' THEN 700
                             ELSE 999
                         END AS time_bucket_no, cloudinary_url
                     FROM tmtmfhgi.site_bbs_info s
-                    LEFT JOIN tmtmfhgi.optimized_images oi ON s.img1 = oi.id 
+                    LEFT JOIN tmtmfhgi.optimized_images oi ON s.img1 = oi.id
                     CROSS JOIN current_seoul_time cst
-                    WHERE (@p_site IS NULL OR @p_site = '' OR s.site = @p_site)
-                        AND s.site NOT IN ('NaverNews', 'GoogleNews')
-                        AND (
+                    WHERE s.posted_dt >= cst.now_time - INTERVAL '24 hours'
+                    AND (@p_site IS NULL OR @p_site = '' OR s.site = @p_site)
+                    AND s.site NOT IN ('NaverNews', 'GoogleNews')
+                    AND (
                             @p_keyword IS NULL OR @p_keyword = ''
                             OR s.title ILIKE '%' || @p_keyword || '%'
                             OR s.""content"" ILIKE '%' || @p_keyword || '%'
-                        )
+                    )
                 ),
                 counted AS (
                     SELECT *, COUNT(*) OVER() as total_count
