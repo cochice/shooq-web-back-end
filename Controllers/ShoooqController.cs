@@ -1596,8 +1596,9 @@ public static class Util
 {
     public static (DateTime start, DateTime end) CalculateWeekRange(this int year, int month, int week)
     {
-        var firstMonday = GetFirstMonday(year, month);
-        var weekStart = firstMonday.AddDays((week - 1) * 7);
+        // 간단한 방식: 1일~7일=1주차, 8일~14일=2주차...
+        var firstDay = new DateTime(year, month, 1);
+        var weekStart = firstDay.AddDays((week - 1) * 7);
         var weekEnd = weekStart.AddDays(7);
 
         return (weekStart, weekEnd);
