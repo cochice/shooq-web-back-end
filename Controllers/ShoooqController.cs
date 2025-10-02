@@ -856,8 +856,29 @@ public class ShoooqController : ControllerBase
                             s.likes, s.url, s.site, s.reg_date, s.reply_num, s.""content"", s.posted_dt,
                             (
                                 COALESCE(s.likes, 0) * 10
-                                + (CASE WHEN s.site = 'SlrClub' THEN (COALESCE(s.reply_num, 0) / 1000) ELSE COALESCE(s.reply_num, 0) END) * 3
+                                + COALESCE(s.reply_num, 0) * 3
                                 + (CASE WHEN s.site = '82Cook' THEN (COALESCE(s.""views"", 0) / 1000) ELSE COALESCE(s.""views"", 0) END)
+                                * CASE s.site
+                                    -- 조회수 높은 커뮤니티 (가중치 낮춤)
+                                    WHEN 'TheQoo' THEN 0.5
+                                    WHEN 'HumorUniv' THEN 0.5
+                                    WHEN '82Cook' THEN 1.0  -- 이미 /1000 되어있음
+                                    WHEN 'Dogdrip' THEN 2.0
+                                    
+                                    -- 중간 커뮤니티
+                                    WHEN 'BobeDream' THEN 3.0
+                                    WHEN 'StrClub' THEN 4.0
+                                    WHEN 'Inven' THEN 5.0
+                                    WHEN 'Ruliweb' THEN 5.0
+                                    WHEN 'Clien' THEN 5.0
+                                    WHEN 'TodayHumor' THEN 6.0
+                                    
+                                    -- 조회수 낮은 커뮤니티 (가중치 높임)
+                                    WHEN 'Damoang' THEN 50.0
+                                    WHEN 'MlbPark' THEN 200.0
+                                    
+                                    ELSE 3.0
+                                END
                             ) AS score, cloudinary_url
                         FROM tmtmfhgi.site_bbs_info s
                         LEFT JOIN tmtmfhgi.optimized_images oi ON s.img1 = oi.id 
