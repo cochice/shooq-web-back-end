@@ -128,6 +128,31 @@ public class ShoooqController : ControllerBase
         }
     }
 
+    private static readonly string GetScaledScore = @"
+        -- 조회수 높은 커뮤니티 (가중치 낮춤)
+        WHEN 'TheQoo' THEN 0.5
+        WHEN 'HumorUniv' THEN 0.5
+        WHEN '82Cook' THEN 1.0
+        WHEN 'Dogdrip' THEN 2.0
+        
+        -- 중간 커뮤니티
+        WHEN 'BobeDream' THEN 3.0
+        WHEN 'StrClub' THEN 4.0
+        WHEN 'Inven' THEN 1.0
+        WHEN 'Ruliweb' THEN 5.0
+        WHEN 'Clien' THEN 5.0
+        WHEN 'TodayHumor' THEN 6.0
+        
+        -- 조회수 낮은 커뮤니티 (가중치 높임)
+        WHEN 'Damoang' THEN 10.0
+
+        -- 매국노
+        WHEN 'MlbPark' THEN 1.0
+        WHEN 'FMKorea' THEN 0
+        
+        ELSE 3.0
+        ";
+
     /// <summary>
     /// 게시물 목록을 조회합니다. (Prepared Statement 방식)
     /// </summary>
@@ -156,7 +181,7 @@ public class ShoooqController : ControllerBase
             await connection.OpenAsync();
 
             var pageIndex = page - 1;
-            var sql = @"
+            var sql = $@"
                 WITH current_seoul_time AS (
                     SELECT timezone('Asia/Seoul', CURRENT_TIMESTAMP) as now_time
                 ),
@@ -167,29 +192,8 @@ public class ShoooqController : ControllerBase
                         (
                             COALESCE(s.likes, 0) * 10
                             + COALESCE(s.reply_num, 0) * 3
-                            + (CASE WHEN s.site = '82Cook'
-                                THEN (COALESCE(s.""views"", 0) / 1000)
-                                ELSE COALESCE(s.""views"", 0) END
-                            ) * CASE s.site
-                                    -- 조회수 높은 커뮤니티 (가중치 낮춤)
-                                    WHEN 'TheQoo' THEN 0.5
-                                    WHEN 'HumorUniv' THEN 0.5
-                                    WHEN '82Cook' THEN 1.0  -- 이미 /1000 되어있음
-                                    WHEN 'Dogdrip' THEN 2.0
-                                    
-                                    -- 중간 커뮤니티
-                                    WHEN 'BobeDream' THEN 3.0
-                                    WHEN 'StrClub' THEN 4.0
-                                    WHEN 'Inven' THEN 5.0
-                                    WHEN 'Ruliweb' THEN 5.0
-                                    WHEN 'Clien' THEN 5.0
-                                    WHEN 'TodayHumor' THEN 6.0
-                                    
-                                    -- 조회수 낮은 커뮤니티 (가중치 높임)
-                                    WHEN 'Damoang' THEN 50.0
-                                    WHEN 'MlbPark' THEN 200.0
-                                    
-                                    ELSE 3.0
+                            * CASE s.site
+                                {GetScaledScore}
                                 END
                         ) AS score,
                         CASE
@@ -313,7 +317,7 @@ public class ShoooqController : ControllerBase
 
             #region [ Query ]
 
-            var sql = @"
+            var sql = $@"
                 (
                 SELECT
                     s.""no"",
@@ -333,27 +337,8 @@ public class ShoooqController : ControllerBase
                     (
                         COALESCE(s.likes, 0) * 10
                         + COALESCE(s.reply_num, 0) * 3
-                        + (CASE WHEN s.site = '82Cook' THEN (COALESCE(s.""views"", 0) / 1000) ELSE COALESCE(s.""views"", 0) END)
                         * (CASE s.site
-                            -- 조회수 높은 커뮤니티 (가중치 낮춤)
-                            WHEN 'TheQoo' THEN 0.5
-                            WHEN 'HumorUniv' THEN 0.5
-                            WHEN '82Cook' THEN 1.0  -- 이미 /1000 되어있음
-                            WHEN 'Dogdrip' THEN 2.0
-                            
-                            -- 중간 커뮤니티
-                            WHEN 'BobeDream' THEN 3.0
-                            WHEN 'StrClub' THEN 4.0
-                            WHEN 'Inven' THEN 5.0
-                            WHEN 'Ruliweb' THEN 5.0
-                            WHEN 'Clien' THEN 5.0
-                            WHEN 'TodayHumor' THEN 6.0
-                            
-                            -- 조회수 낮은 커뮤니티 (가중치 높임)
-                            WHEN 'Damoang' THEN 50.0
-                            WHEN 'MlbPark' THEN 200.0
-                            
-                            ELSE 3.0
+                        {GetScaledScore}
                         END)
                     ) AS score, cloudinary_url
                 FROM tmtmfhgi.site_bbs_info s
@@ -368,27 +353,8 @@ public class ShoooqController : ControllerBase
                 ORDER BY (
                     COALESCE(s.likes, 0) * 10
                     + COALESCE(s.reply_num, 0) * 3
-                    + (CASE WHEN s.site = '82Cook' THEN (COALESCE(s.""views"", 0) / 1000) ELSE COALESCE(s.""views"", 0) END)
                     * (CASE s.site
-                            -- 조회수 높은 커뮤니티 (가중치 낮춤)
-                            WHEN 'TheQoo' THEN 0.5
-                            WHEN 'HumorUniv' THEN 0.5
-                            WHEN '82Cook' THEN 1.0  -- 이미 /1000 되어있음
-                            WHEN 'Dogdrip' THEN 2.0
-                            
-                            -- 중간 커뮤니티
-                            WHEN 'BobeDream' THEN 3.0
-                            WHEN 'StrClub' THEN 4.0
-                            WHEN 'Inven' THEN 5.0
-                            WHEN 'Ruliweb' THEN 5.0
-                            WHEN 'Clien' THEN 5.0
-                            WHEN 'TodayHumor' THEN 6.0
-                            
-                            -- 조회수 낮은 커뮤니티 (가중치 높임)
-                            WHEN 'Damoang' THEN 50.0
-                            WHEN 'MlbPark' THEN 200.0
-                            
-                            ELSE 3.0
+                        {GetScaledScore}
                         END)
                 ) DESC
                 LIMIT 20
@@ -413,27 +379,8 @@ public class ShoooqController : ControllerBase
                     (
                         COALESCE(s.likes, 0) * 10
                         + COALESCE(s.reply_num, 0) * 3
-                        + (CASE WHEN s.site = '82Cook' THEN (COALESCE(s.""views"", 0) / 1000) ELSE COALESCE(s.""views"", 0) END)
                         * (CASE s.site
-                            -- 조회수 높은 커뮤니티 (가중치 낮춤)
-                            WHEN 'TheQoo' THEN 0.5
-                            WHEN 'HumorUniv' THEN 0.5
-                            WHEN '82Cook' THEN 1.0  -- 이미 /1000 되어있음
-                            WHEN 'Dogdrip' THEN 2.0
-                            
-                            -- 중간 커뮤니티
-                            WHEN 'BobeDream' THEN 3.0
-                            WHEN 'StrClub' THEN 4.0
-                            WHEN 'Inven' THEN 5.0
-                            WHEN 'Ruliweb' THEN 5.0
-                            WHEN 'Clien' THEN 5.0
-                            WHEN 'TodayHumor' THEN 6.0
-                            
-                            -- 조회수 낮은 커뮤니티 (가중치 높임)
-                            WHEN 'Damoang' THEN 50.0
-                            WHEN 'MlbPark' THEN 200.0
-                            
-                            ELSE 3.0
+                            {GetScaledScore}
                         END)
                     ) AS score, cloudinary_url
                 FROM tmtmfhgi.site_bbs_info s
@@ -448,27 +395,8 @@ public class ShoooqController : ControllerBase
                 ORDER BY (
                     COALESCE(s.likes, 0) * 10
                     + COALESCE(s.reply_num, 0) * 3
-                    + (CASE WHEN s.site = '82Cook' THEN (COALESCE(s.""views"", 0) / 1000) ELSE COALESCE(s.""views"", 0) END)
                     * (CASE s.site
-                        -- 조회수 높은 커뮤니티 (가중치 낮춤)
-                        WHEN 'TheQoo' THEN 0.5
-                        WHEN 'HumorUniv' THEN 0.5
-                        WHEN '82Cook' THEN 1.0  -- 이미 /1000 되어있음
-                        WHEN 'Dogdrip' THEN 2.0
-                        
-                        -- 중간 커뮤니티
-                        WHEN 'BobeDream' THEN 3.0
-                        WHEN 'StrClub' THEN 4.0
-                        WHEN 'Inven' THEN 5.0
-                        WHEN 'Ruliweb' THEN 5.0
-                        WHEN 'Clien' THEN 5.0
-                        WHEN 'TodayHumor' THEN 6.0
-                        
-                        -- 조회수 낮은 커뮤니티 (가중치 높임)
-                        WHEN 'Damoang' THEN 50.0
-                        WHEN 'MlbPark' THEN 200.0
-                        
-                        ELSE 3.0
+                        {GetScaledScore}
                     END)
                 ) DESC
                 LIMIT 10
@@ -493,27 +421,8 @@ public class ShoooqController : ControllerBase
                     (
                         COALESCE(s.likes, 0) * 10
                         + COALESCE(s.reply_num, 0) * 3
-                        + (CASE WHEN s.site = '82Cook' THEN (COALESCE(s.""views"", 0) / 1000) ELSE COALESCE(s.""views"", 0) END)
                         * (CASE s.site
-                            -- 조회수 높은 커뮤니티 (가중치 낮춤)
-                            WHEN 'TheQoo' THEN 0.5
-                            WHEN 'HumorUniv' THEN 0.5
-                            WHEN '82Cook' THEN 1.0  -- 이미 /1000 되어있음
-                            WHEN 'Dogdrip' THEN 2.0
-                            
-                            -- 중간 커뮤니티
-                            WHEN 'BobeDream' THEN 3.0
-                            WHEN 'StrClub' THEN 4.0
-                            WHEN 'Inven' THEN 5.0
-                            WHEN 'Ruliweb' THEN 5.0
-                            WHEN 'Clien' THEN 5.0
-                            WHEN 'TodayHumor' THEN 6.0
-                            
-                            -- 조회수 낮은 커뮤니티 (가중치 높임)
-                            WHEN 'Damoang' THEN 50.0
-                            WHEN 'MlbPark' THEN 200.0
-                            
-                            ELSE 3.0
+                            {GetScaledScore}
                         END)
                     ) AS score, cloudinary_url
                 FROM tmtmfhgi.site_bbs_info s
@@ -528,27 +437,8 @@ public class ShoooqController : ControllerBase
                 ORDER BY (
                     COALESCE(s.likes, 0) * 10
                     + COALESCE(s.reply_num, 0) * 3
-                    + (CASE WHEN s.site = '82Cook' THEN (COALESCE(s.""views"", 0) / 1000) ELSE COALESCE(s.""views"", 0) END)
                     * (CASE s.site
-                        -- 조회수 높은 커뮤니티 (가중치 낮춤)
-                        WHEN 'TheQoo' THEN 0.5
-                        WHEN 'HumorUniv' THEN 0.5
-                        WHEN '82Cook' THEN 1.0  -- 이미 /1000 되어있음
-                        WHEN 'Dogdrip' THEN 2.0
-                        
-                        -- 중간 커뮤니티
-                        WHEN 'BobeDream' THEN 3.0
-                        WHEN 'StrClub' THEN 4.0
-                        WHEN 'Inven' THEN 5.0
-                        WHEN 'Ruliweb' THEN 5.0
-                        WHEN 'Clien' THEN 5.0
-                        WHEN 'TodayHumor' THEN 6.0
-                        
-                        -- 조회수 낮은 커뮤니티 (가중치 높임)
-                        WHEN 'Damoang' THEN 50.0
-                        WHEN 'MlbPark' THEN 200.0
-                        
-                        ELSE 3.0
+                        {GetScaledScore}
                     END)
                 ) DESC
                 LIMIT 10
@@ -573,27 +463,8 @@ public class ShoooqController : ControllerBase
                     (
                         COALESCE(s.likes, 0) * 10
                         + COALESCE(s.reply_num, 0) * 3
-                        + (CASE WHEN s.site = '82Cook' THEN (COALESCE(s.""views"", 0) / 1000) ELSE COALESCE(s.""views"", 0) END)
                         * (CASE s.site
-                            -- 조회수 높은 커뮤니티 (가중치 낮춤)
-                            WHEN 'TheQoo' THEN 0.5
-                            WHEN 'HumorUniv' THEN 0.5
-                            WHEN '82Cook' THEN 1.0  -- 이미 /1000 되어있음
-                            WHEN 'Dogdrip' THEN 2.0
-                            
-                            -- 중간 커뮤니티
-                            WHEN 'BobeDream' THEN 3.0
-                            WHEN 'StrClub' THEN 4.0
-                            WHEN 'Inven' THEN 5.0
-                            WHEN 'Ruliweb' THEN 5.0
-                            WHEN 'Clien' THEN 5.0
-                            WHEN 'TodayHumor' THEN 6.0
-                            
-                            -- 조회수 낮은 커뮤니티 (가중치 높임)
-                            WHEN 'Damoang' THEN 50.0
-                            WHEN 'MlbPark' THEN 200.0
-                            
-                            ELSE 3.0
+                            {GetScaledScore}
                         END)
                     ) AS score, cloudinary_url
                 FROM tmtmfhgi.site_bbs_info s
@@ -608,27 +479,8 @@ public class ShoooqController : ControllerBase
                 ORDER BY (
                     COALESCE(s.likes, 0) * 10
                     + COALESCE(s.reply_num, 0) * 3
-                    + (CASE WHEN s.site = '82Cook' THEN (COALESCE(s.""views"", 0) / 1000) ELSE COALESCE(s.""views"", 0) END)
                     * (CASE s.site
-                        -- 조회수 높은 커뮤니티 (가중치 낮춤)
-                        WHEN 'TheQoo' THEN 0.5
-                        WHEN 'HumorUniv' THEN 0.5
-                        WHEN '82Cook' THEN 1.0  -- 이미 /1000 되어있음
-                        WHEN 'Dogdrip' THEN 2.0
-                        
-                        -- 중간 커뮤니티
-                        WHEN 'BobeDream' THEN 3.0
-                        WHEN 'StrClub' THEN 4.0
-                        WHEN 'Inven' THEN 5.0
-                        WHEN 'Ruliweb' THEN 5.0
-                        WHEN 'Clien' THEN 5.0
-                        WHEN 'TodayHumor' THEN 6.0
-                        
-                        -- 조회수 낮은 커뮤니티 (가중치 높임)
-                        WHEN 'Damoang' THEN 50.0
-                        WHEN 'MlbPark' THEN 200.0
-                        
-                        ELSE 3.0
+                        {GetScaledScore}
                     END)
                 ) DESC
                 LIMIT 10
@@ -874,8 +726,8 @@ public class ShoooqController : ControllerBase
                                     WHEN 'TodayHumor' THEN 6.0
                                     
                                     -- 조회수 낮은 커뮤니티 (가중치 높임)
-                                    WHEN 'Damoang' THEN 50.0
-                                    WHEN 'MlbPark' THEN 200.0
+                                    WHEN 'Damoang' THEN 10.0
+                                    WHEN 'MlbPark' THEN 1.0
                                     
                                     ELSE 3.0
                                 END
