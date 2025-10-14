@@ -128,29 +128,34 @@ public class ShoooqController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// 조정된 스코어 하드코딩 문자열
+    /// </summary>
     private static readonly string GetScaledScore = @"
         -- 조회수 높은 커뮤니티 (가중치 낮춤)
-        WHEN 'TheQoo' THEN 0.5
-        WHEN 'HumorUniv' THEN 0.5
-        WHEN '82Cook' THEN 1.0
-        WHEN 'Dogdrip' THEN 2.0
+        WHEN 'TheQoo' THEN 1.5
+        WHEN 'Ruliweb' THEN 0.5
+        WHEN 'Ppomppu' THEN 0.5
+        WHEN 'BobeDream' THEN 0.5
         
-        -- 중간 커뮤니티
-        WHEN 'BobeDream' THEN 3.0
-        WHEN 'StrClub' THEN 4.0
-        WHEN 'Inven' THEN 1.0
-        WHEN 'Ruliweb' THEN 5.0
-        WHEN 'Clien' THEN 5.0
-        WHEN 'TodayHumor' THEN 6.0
-        
-        -- 조회수 낮은 커뮤니티 (가중치 높임)
-        WHEN 'Damoang' THEN 10.0
+        -- 조회수 중상위 커뮤니티 (가중치 조절)
+        WHEN 'HumorUniv' THEN 2.0 * 2
+        WHEN 'StrClub' THEN 2.0
 
-        -- 매국노
-        WHEN 'MlbPark' THEN 1.0
-        WHEN 'FMKorea' THEN 0
+        -- 조회수 중간 (가중치 조금 높임)
+        WHEN 'Clien' THEN 5.0 * 2
+        WHEN 'Inven' THEN 5.0 * 2
+        WHEN 'Damoang' THEN 5.0
+        WHEN '82Cook' THEN 5.0
+
+        -- 조회수 낮은 커뮤니티 (가중치 높임)
+        WHEN 'TodayHumor' THEN 9.0
         
-        ELSE 3.0
+        -- 2ㅉ
+        WHEN 'MlbPark' THEN 0.0
+        WHEN 'FMKorea' THEN -10.0
+        
+        ELSE 0.0
         ";
 
     /// <summary>
@@ -220,7 +225,7 @@ public class ShoooqController : ControllerBase
                     SELECT *, COUNT(*) OVER() as total_count
                     FROM filtered
                 )
-                SELECT
+                SELECT DISTINCT
                     c.score, c.time_bucket_no, c.posted_dt, c.site, c.reg_date, c.reply_num,
                     c.""no"", c.""number"", c.title, c.author, c.""date"", c.""views"", c.likes,
                     c.url, c.""content"", c.total_count, c.cloudinary_url
@@ -699,7 +704,7 @@ public class ShoooqController : ControllerBase
 
             #region [ Query ]
 
-            var sql = @"
+            var sql = $@"
             (
                     -- gubun 01@ 전체 사이트 통합 랭킹 (상위 20개)
                     WITH list AS (
@@ -709,27 +714,8 @@ public class ShoooqController : ControllerBase
                             (
                                 COALESCE(s.likes, 0) * 10
                                 + COALESCE(s.reply_num, 0) * 3
-                                + (CASE WHEN s.site = '82Cook' THEN (COALESCE(s.""views"", 0) / 1000) ELSE COALESCE(s.""views"", 0) END)
                                 * CASE s.site
-                                    -- 조회수 높은 커뮤니티 (가중치 낮춤)
-                                    WHEN 'TheQoo' THEN 0.5
-                                    WHEN 'HumorUniv' THEN 0.5
-                                    WHEN '82Cook' THEN 1.0  -- 이미 /1000 되어있음
-                                    WHEN 'Dogdrip' THEN 2.0
-                                    
-                                    -- 중간 커뮤니티
-                                    WHEN 'BobeDream' THEN 3.0
-                                    WHEN 'StrClub' THEN 4.0
-                                    WHEN 'Inven' THEN 5.0
-                                    WHEN 'Ruliweb' THEN 5.0
-                                    WHEN 'Clien' THEN 5.0
-                                    WHEN 'TodayHumor' THEN 6.0
-                                    
-                                    -- 조회수 낮은 커뮤니티 (가중치 높임)
-                                    WHEN 'Damoang' THEN 10.0
-                                    WHEN 'MlbPark' THEN 1.0
-                                    
-                                    ELSE 3.0
+                                    {GetScaledScore}
                                 END
                             ) AS score, cloudinary_url
                         FROM tmtmfhgi.site_bbs_info s
@@ -1034,30 +1020,6 @@ public class ShoooqController : ControllerBase
                     LIMIT 10
                 )
                 ORDER BY gubun";
-
-            var sql1 = @"
-                    WITH list AS (
-                        SELECT
-                            s.""no"", s.""number"", s.title, s.author, s.""date"", s.""views"",
-                            s.likes, s.url, s.site, s.reg_date, s.reply_num, s.""content"", s.posted_dt,
-                            (
-                                COALESCE(s.likes, 0) * 10
-                                + (CASE WHEN s.site = 'SlrClub' THEN (COALESCE(s.reply_num, 0) / 1000) ELSE COALESCE(s.reply_num, 0) END) * 3
-                                + (CASE WHEN s.site = '82Cook' THEN (COALESCE(s.""views"", 0) / 1000) ELSE COALESCE(s.""views"", 0) END)
-                            ) AS score
-                        FROM tmtmfhgi.site_bbs_info s
-                        WHERE s.site NOT IN ('NaverNews', 'GoogleNews')
-                        AND s.posted_dt >= @p_startDate
-                        AND s.posted_dt < @p_endDate
-                    )
-                    SELECT
-                        c.score, c.posted_dt, c.site, c.reg_date, c.reply_num,
-                        c.""no"", c.""number"", c.title, c.author, c.""date"", c.""views"", c.likes,
-                        c.url, c.""content"", '01' gubun
-                    FROM list c
-                    ORDER BY c.score DESC
-                    LIMIT 20
-            ";
 
             #endregion
 
