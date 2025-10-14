@@ -689,14 +689,28 @@ public class ShoooqController : ControllerBase
     public async Task<ActionResult<MainPagedResult<SiteBbsInfo>>> GetWeek(
         string? yyyy = null,
         string? mm = null,
-        string? w = null)
+        string? w = null,
+        string? d = null)
     {
         try
         {
             int.TryParse(yyyy, out int year);
             int.TryParse(mm, out int month);
             int.TryParse(w, out int week);
-            var (startDate, endDate) = year.CalculateWeekRange(month, week);
+
+            DateTime startDate, endDate;
+
+            // d 파라미터가 있으면 해당 날짜만 조회
+            if (!string.IsNullOrEmpty(d) && DateTime.TryParse(d, out DateTime specificDate))
+            {
+                startDate = specificDate.Date;
+                endDate = specificDate.Date.AddDays(1);
+            }
+            else
+            {
+                // d 파라미터가 없으면 기존처럼 주차 범위 계산
+                (startDate, endDate) = year.CalculateWeekRange(month, week);
+            }
 
             var connectionString = Environment.GetEnvironmentVariable("DATABASE_URL") ?? _configuration.GetConnectionString("DefaultConnection");
             using var connection = new NpgsqlConnection(connectionString);
@@ -1032,10 +1046,11 @@ public class ShoooqController : ControllerBase
                 p_endDate = endDate
             };
 
-            _logger.LogInformation("API Call: /api/week - Parameters: yyyy={yyyy}, mm={mm}, w={w}, StartDate={StartDate}, EndDate={EndDate}",
+            _logger.LogInformation("API Call: /api/week - Parameters: yyyy={yyyy}, mm={mm}, w={w}, d={d}, StartDate={StartDate}, EndDate={EndDate}",
                 yyyy,
                 mm,
                 w,
+                d ?? "NULL",
                 startDate,
                 endDate);
 
