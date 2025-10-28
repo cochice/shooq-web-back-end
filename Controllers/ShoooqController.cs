@@ -584,7 +584,8 @@ public class ShoooqController : ControllerBase
                         s.""content"",
                         s.posted_dt
                     FROM tmtmfhgi.site_bbs_info s
-                    WHERE site IN ('NaverNews', 'GoogleNews')
+                    WHERE s.site IN ('NaverNews', 'GoogleNews')
+                    AND s.posted_dt >= NOW() AT TIME ZONE 'Asia/Seoul' - INTERVAL '24 hours'
                     AND (
                         @p_keyword IS NULL OR @p_keyword = ''
                         OR s.title ILIKE '%' || @p_keyword || '%'
