@@ -159,6 +159,49 @@ public class ShoooqController : ControllerBase
         ";
 
     /// <summary>
+    /// 조정된 스코어 하드코딩 문자열
+    /// </summary>
+    private static readonly string GetScaledScore2 = @"
+        (CASE s.site
+            WHEN 'TheQoo' THEN COALESCE(s.views, 0) / 10
+            WHEN 'YouTube' THEN COALESCE(s.views, 0) / 100
+            WHEN 'HumorUniv' THEN COALESCE(s.views, 0) / 1000
+            WHEN 'Ruliweb' THEN COALESCE(s.views, 0) / 100
+            ELSE COALESCE(s.views, 0)
+        END)
+        + (CASE s.site
+            WHEN 'HumorUniv' THEN COALESCE(s.likes, 0)
+            ELSE COALESCE(s.likes, 0) * 10
+        END)
+        + COALESCE(s.reply_num, 0) * 3
+        * CASE s.site
+            -- 조회수 높은 커뮤니티 (가중치 낮춤)
+            WHEN 'Ruliweb' THEN 0.5
+            WHEN 'Ppomppu' THEN 0.5
+            WHEN 'BobeDream' THEN 0.5
+            
+            -- 조회수 중상위 커뮤니티 (가중치 조절)
+            WHEN 'HumorUniv' THEN 0
+            WHEN 'StrClub' THEN 5
+
+            -- 조회수 중간 (가중치 조금 높임)
+            WHEN 'Clien' THEN 30
+            WHEN 'Inven' THEN 30
+            WHEN 'Damoang' THEN 10
+            WHEN '82Cook' THEN 5
+
+            -- 조회수 낮은 커뮤니티 (가중치 높임)
+            WHEN 'TodayHumor' THEN 50
+            
+            -- 2ㅉ
+            WHEN 'MlbPark' THEN 0.0
+            WHEN 'FMKorea' THEN 0.0
+            
+            ELSE 0.0
+        END
+        ";
+
+    /// <summary>
     /// 게시물 목록을 조회합니다. (Prepared Statement 방식)
     /// </summary>
     /// <param name="page">페이지 번호 (기본값: 1)</param>
@@ -195,11 +238,7 @@ public class ShoooqController : ControllerBase
                         s.""no"", s.""number"", s.title, s.author, s.""date"", s.""views"",
                         s.likes, s.url, s.site, s.reg_date, s.reply_num, s.""content"", s.posted_dt,
                         (
-                            COALESCE(s.likes, 0) * 10
-                            + COALESCE(s.reply_num, 0) * 3
-                            * CASE s.site
-                                {GetScaledScore}
-                                END
+                            {GetScaledScore2}
                         ) AS score,
                         CASE
                             WHEN s.posted_dt >= cst.now_time - INTERVAL '1 hour' THEN 1
@@ -340,11 +379,7 @@ public class ShoooqController : ControllerBase
                     s.posted_dt,
                     '1h' AS time_bucket,
                     (
-                        COALESCE(s.likes, 0) * 10
-                        + COALESCE(s.reply_num, 0) * 3
-                        * (CASE s.site
-                        {GetScaledScore}
-                        END)
+                        {GetScaledScore2}
                     ) AS score, cloudinary_url
                 FROM tmtmfhgi.site_bbs_info s
                 LEFT JOIN tmtmfhgi.optimized_images oi ON s.img1 = oi.id
@@ -355,13 +390,7 @@ public class ShoooqController : ControllerBase
                     OR s.""content"" ILIKE '%' || @p_keyword || '%'
                 )
                 AND (@p_is_news_yn != 'n' OR s.site NOT IN ('NaverNews', 'GoogleNews'))
-                ORDER BY (
-                    COALESCE(s.likes, 0) * 10
-                    + COALESCE(s.reply_num, 0) * 3
-                    * (CASE s.site
-                        {GetScaledScore}
-                        END)
-                ) DESC
+                ORDER BY score DESC
                 LIMIT 20
                 )
                 UNION ALL
@@ -382,11 +411,7 @@ public class ShoooqController : ControllerBase
                     s.posted_dt,
                     '3h' AS time_bucket,
                     (
-                        COALESCE(s.likes, 0) * 10
-                        + COALESCE(s.reply_num, 0) * 3
-                        * (CASE s.site
-                            {GetScaledScore}
-                        END)
+                        {GetScaledScore2}
                     ) AS score, cloudinary_url
                 FROM tmtmfhgi.site_bbs_info s
                 LEFT JOIN tmtmfhgi.optimized_images oi ON s.img1 = oi.id
@@ -397,13 +422,7 @@ public class ShoooqController : ControllerBase
                     OR s.""content"" ILIKE '%' || @p_keyword || '%'
                 )
                 AND (@p_is_news_yn != 'n' OR s.site NOT IN ('NaverNews', 'GoogleNews'))
-                ORDER BY (
-                    COALESCE(s.likes, 0) * 10
-                    + COALESCE(s.reply_num, 0) * 3
-                    * (CASE s.site
-                        {GetScaledScore}
-                    END)
-                ) DESC
+                ORDER BY score DESC
                 LIMIT 10
                 )
                 UNION ALL
@@ -424,11 +443,7 @@ public class ShoooqController : ControllerBase
                     s.posted_dt,
                     '9h' AS time_bucket,
                     (
-                        COALESCE(s.likes, 0) * 10
-                        + COALESCE(s.reply_num, 0) * 3
-                        * (CASE s.site
-                            {GetScaledScore}
-                        END)
+                        {GetScaledScore2}
                     ) AS score, cloudinary_url
                 FROM tmtmfhgi.site_bbs_info s
                 LEFT JOIN tmtmfhgi.optimized_images oi ON s.img1 = oi.id
@@ -439,13 +454,7 @@ public class ShoooqController : ControllerBase
                     OR s.""content"" ILIKE '%' || @p_keyword || '%'
                 )
                 AND (@p_is_news_yn != 'n' OR s.site NOT IN ('NaverNews', 'GoogleNews'))
-                ORDER BY (
-                    COALESCE(s.likes, 0) * 10
-                    + COALESCE(s.reply_num, 0) * 3
-                    * (CASE s.site
-                        {GetScaledScore}
-                    END)
-                ) DESC
+                ORDER BY score DESC
                 LIMIT 10
                 )
                 UNION ALL
@@ -466,11 +475,7 @@ public class ShoooqController : ControllerBase
                     s.posted_dt,
                     '24h' AS time_bucket,
                     (
-                        COALESCE(s.likes, 0) * 10
-                        + COALESCE(s.reply_num, 0) * 3
-                        * (CASE s.site
-                            {GetScaledScore}
-                        END)
+                        {GetScaledScore2}
                     ) AS score, cloudinary_url
                 FROM tmtmfhgi.site_bbs_info s
                 LEFT JOIN tmtmfhgi.optimized_images oi ON s.img1 = oi.id
@@ -481,13 +486,7 @@ public class ShoooqController : ControllerBase
                     OR s.""content"" ILIKE '%' || @p_keyword || '%'
                 )
                 AND (@p_is_news_yn != 'n' OR s.site NOT IN ('NaverNews', 'GoogleNews'))
-                ORDER BY (
-                    COALESCE(s.likes, 0) * 10
-                    + COALESCE(s.reply_num, 0) * 3
-                    * (CASE s.site
-                        {GetScaledScore}
-                    END)
-                ) DESC
+                ORDER BY score DESC
                 LIMIT 10
                 )
                 ;";
@@ -727,17 +726,14 @@ public class ShoooqController : ControllerBase
                             s.""no"", s.""number"", s.title, s.author, s.""date"", s.""views"",
                             s.likes, s.url, s.site, s.reg_date, s.reply_num, s.""content"", s.posted_dt,
                             (
-                                COALESCE(s.likes, 0) * 10
-                                + COALESCE(s.reply_num, 0) * 3
-                                * CASE s.site
-                                    {GetScaledScore}
-                                END
+                                {GetScaledScore2}
                             ) AS score, cloudinary_url
                         FROM tmtmfhgi.site_bbs_info s
                         LEFT JOIN tmtmfhgi.optimized_images oi ON s.img1 = oi.id 
                         WHERE s.site NOT IN ('NaverNews', 'GoogleNews')
                             AND s.posted_dt >= @p_startDate
                             AND s.posted_dt < @p_endDate
+                            AND s.site != 'YouTube'
                     )
                     SELECT
                         c.score, c.posted_dt, c.site, c.reg_date, c.reply_num,
@@ -1034,7 +1030,7 @@ public class ShoooqController : ControllerBase
                     ORDER BY (COALESCE(c.likes, 0) * 10) + (COALESCE(c.reply_num, 0) * 3) + COALESCE(c.""views"", 0) DESC
                     LIMIT 10
                 )
-                ORDER BY gubun";
+                ORDER BY gubun, score DESC";
 
             #endregion
 
