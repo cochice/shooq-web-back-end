@@ -39,6 +39,7 @@ builder.Services.AddCors(options =>
 
 // Add services
 builder.Services.AddScoped<AccessLogService>();
+builder.Services.AddScoped<ShooqService>();
 
 builder.Services.AddControllers();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi

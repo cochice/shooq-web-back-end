@@ -12,17 +12,19 @@ namespace Marvin.Tmtmfh91.Web.BackEnd.Controllers;
 [Route("api")]
 public class ShoooqController : ControllerBase
 {
+    private readonly ShooqService _shooqService;
     private readonly ApplicationDbContext _context;
     private readonly ILogger<ShoooqController> _logger;
     private readonly AccessLogService _accessLogService;
     private readonly IConfiguration _configuration;
 
-    public ShoooqController(ApplicationDbContext context, ILogger<ShoooqController> logger, AccessLogService accessLogService, IConfiguration configuration)
+    public ShoooqController(ApplicationDbContext context, ILogger<ShoooqController> logger, AccessLogService accessLogService, IConfiguration configuration, ShooqService shooqService)
     {
         _context = context;
         _logger = logger;
         _accessLogService = accessLogService;
         _configuration = configuration;
+        _shooqService = shooqService;
     }
 
     [HttpGet("test")]
@@ -131,32 +133,32 @@ public class ShoooqController : ControllerBase
     /// <summary>
     /// 조정된 스코어 하드코딩 문자열
     /// </summary>
-    private static readonly string GetScaledScore = @"
-        -- 조회수 높은 커뮤니티 (가중치 낮춤)
-        WHEN 'TheQoo' THEN 1.5
-        WHEN 'Ruliweb' THEN 0.5
-        WHEN 'Ppomppu' THEN 0.5
-        WHEN 'BobeDream' THEN 0.5
-        
-        -- 조회수 중상위 커뮤니티 (가중치 조절)
-        WHEN 'HumorUniv' THEN 2.0 * 2
-        WHEN 'StrClub' THEN 2.0
+    // private static readonly string GetScaledScore = @"
+    //     -- 조회수 높은 커뮤니티 (가중치 낮춤)
+    //     WHEN 'TheQoo' THEN 1.5
+    //     WHEN 'Ruliweb' THEN 0.5
+    //     WHEN 'Ppomppu' THEN 0.5
+    //     WHEN 'BobeDream' THEN 0.5
 
-        -- 조회수 중간 (가중치 조금 높임)
-        WHEN 'Clien' THEN 5.0 * 2
-        WHEN 'Inven' THEN 5.0 * 2
-        WHEN 'Damoang' THEN 5.0
-        WHEN '82Cook' THEN 5.0
+    //     -- 조회수 중상위 커뮤니티 (가중치 조절)
+    //     WHEN 'HumorUniv' THEN 2.0 * 2
+    //     WHEN 'StrClub' THEN 2.0
 
-        -- 조회수 낮은 커뮤니티 (가중치 높임)
-        WHEN 'TodayHumor' THEN 9.0
-        
-        -- 2ㅉ
-        WHEN 'MlbPark' THEN 0.0
-        WHEN 'FMKorea' THEN -10.0
-        
-        ELSE 0.0
-        ";
+    //     -- 조회수 중간 (가중치 조금 높임)
+    //     WHEN 'Clien' THEN 5.0 * 2
+    //     WHEN 'Inven' THEN 5.0 * 2
+    //     WHEN 'Damoang' THEN 5.0
+    //     WHEN '82Cook' THEN 5.0
+
+    //     -- 조회수 낮은 커뮤니티 (가중치 높임)
+    //     WHEN 'TodayHumor' THEN 9.0
+
+    //     -- 2ㅉ
+    //     WHEN 'MlbPark' THEN 0.0
+    //     WHEN 'FMKorea' THEN -10.0
+
+    //     ELSE 0.0
+    //     ";
 
     /// <summary>
     /// 조정된 스코어 하드코딩 문자열
@@ -293,8 +295,12 @@ public class ShoooqController : ControllerBase
             var totalCount = postsList.FirstOrDefault()?.total_count != null ? Convert.ToInt32(postsList.FirstOrDefault()?.total_count) : 0;
             var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
 
+            // Fetch all optimized images in parallel
+            var imagesTasks = postsList.Select(p => _shooqService.GetOptimizedImagesAsync((int)p.no)).ToList();
+            var imagesResults = await Task.WhenAll(imagesTasks);
+
             // Convert dynamic objects to SiteBbsInfo objects
-            var siteBbsInfos = postsList.Select(p => new SiteBbsInfo
+            var siteBbsInfos = postsList.Select((p, index) => new SiteBbsInfo
             {
                 no = (long)p.no,
                 number = p.number != null ? (long?)p.number : null,
@@ -313,7 +319,8 @@ public class ShoooqController : ControllerBase
                 score = p.score != null ? (long?)p.score : null,
                 time_bucket = p.time_bucket,
                 time_bucket_no = p.time_bucket_no != null ? (int?)Convert.ToInt32(p.time_bucket_no) : null,
-                cloudinary_url = p.cloudinary_url
+                cloudinary_url = p.cloudinary_url,
+                OptimizedImagesList = imagesResults[index]
             }).ToList();
 
             var result = new PagedResult<SiteBbsInfo>
@@ -506,8 +513,12 @@ public class ShoooqController : ControllerBase
             var posts = await connection.QueryAsync<dynamic>(sql, parameters);
             var postsList = posts.ToList();
 
+            // Fetch all optimized images in parallel
+            var imagesTasks = postsList.Select(p => _shooqService.GetOptimizedImagesAsync((int)p.no)).ToList();
+            var imagesResults = await Task.WhenAll(imagesTasks);
+
             // Convert dynamic objects to SiteBbsInfo objects
-            var siteBbsInfos = postsList.Select(p => new SiteBbsInfo
+            var siteBbsInfos = postsList.Select((p, index) => new SiteBbsInfo
             {
                 no = (long)p.no,
                 number = p.number != null ? (long?)p.number : null,
@@ -526,7 +537,8 @@ public class ShoooqController : ControllerBase
                 score = p.score != null ? (long?)p.score : null,
                 time_bucket = p.time_bucket,
                 time_bucket_no = p.time_bucket_no != null ? (int?)Convert.ToInt32(p.time_bucket_no) : null,
-                cloudinary_url = p.cloudinary_url
+                cloudinary_url = p.cloudinary_url,
+                OptimizedImagesList = imagesResults[index]
             }).ToList();
 
             var result = new MainPagedResult<SiteBbsInfo>
@@ -1054,8 +1066,12 @@ public class ShoooqController : ControllerBase
             var posts = await connection.QueryAsync<dynamic>(sql, parameters);
             var postsList = posts.ToList();
 
+            // Fetch all optimized images in parallel
+            // var imagesTasks = postsList.Select(p => _shooqService.GetOptimizedImagesAsync((int)p.no)).ToList();
+            // var imagesResults = await Task.WhenAll(imagesTasks);
+
             // Convert dynamic objects to SiteBbsInfo objects
-            var siteBbsInfos = postsList.Select(p => new SiteBbsInfo
+            var siteBbsInfos = postsList.Select((p, index) => new SiteBbsInfo
             {
                 no = (long)p.no,
                 number = p.number != null ? (long?)p.number : null,
@@ -1076,6 +1092,7 @@ public class ShoooqController : ControllerBase
                 time_bucket_no = null,
                 gubun = p.gubun,
                 cloudinary_url = p.cloudinary_url,
+                OptimizedImagesList = null
             }).ToList();
 
             var result = new MainPagedResult<SiteBbsInfo>

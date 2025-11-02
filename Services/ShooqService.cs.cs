@@ -1,0 +1,37 @@
+using Microsoft.EntityFrameworkCore;
+using Marvin.Tmtmfh91.Web.BackEnd.Data;
+using Marvin.Tmtmfh91.Web.BackEnd.Models;
+using Dapper;
+using Npgsql;
+
+namespace Marvin.Tmtmfh91.Web.Backend.Services;
+
+public class ShooqService
+{
+    private readonly ApplicationDbContext _context;
+
+    private readonly IConfiguration _configuration;
+
+    public ShooqService(ApplicationDbContext context, IConfiguration configuration)
+    {
+        _context = context;
+        _configuration = configuration;
+    }
+
+    public async Task<List<OptimizedImages>> GetOptimizedImagesAsync(int no)
+    {
+        var connectionString = Environment.GetEnvironmentVariable("DATABASE_URL") ?? _configuration.GetConnectionString("DefaultConnection");
+        using var db = new NpgsqlConnection(connectionString);
+
+        var sql = @"
+        SELECT
+            id, cloudinary_url, ""no""
+        FROM tmtmfhgi.optimized_images oi
+        WHERE NO = @no
+        ";
+
+        var list = (await db.QueryAsync<OptimizedImages>(sql, new { no })).AsList();
+
+        return list;
+    }
+}

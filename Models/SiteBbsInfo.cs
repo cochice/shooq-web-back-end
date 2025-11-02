@@ -64,4 +64,20 @@ public class SiteBbsInfo
 
     [Column("cloudinary_url")]
     public string? cloudinary_url { get; set; }
+
+    [Column("img_srcs")]
+    public List<OptimizedImages>? OptimizedImagesList { get; set; }
+}
+
+[Table("optimized_images", Schema = "tmtmfhgi")]
+public class OptimizedImages
+{
+    [Column("id")]
+    public int id { get; set; }
+
+    [Column("cloudinary_url")]
+    public string? cloudinary_url { get; set; }
+
+    [Column("no")]
+    public long? no { get; set; }
 }
