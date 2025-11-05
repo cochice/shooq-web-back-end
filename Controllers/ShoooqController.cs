@@ -167,15 +167,13 @@ public class ShoooqController : ControllerBase
         (CASE s.site
             WHEN 'TheQoo' THEN COALESCE(s.views, 0) / 10
             WHEN 'YouTube' THEN COALESCE(s.views, 0) / 100
-            WHEN 'HumorUniv' THEN COALESCE(s.views, 0) / 1000
+            WHEN 'HumorUniv' THEN COALESCE(s.views, 0) / 900
             WHEN 'Ruliweb' THEN COALESCE(s.views, 0) / 100
+            WHEN 'FMKorea' THEN COALESCE(s.views, 0) / 800
             ELSE COALESCE(s.views, 0)
         END)
-        + (CASE s.site
-            WHEN 'HumorUniv' THEN COALESCE(s.likes, 0)
-            ELSE COALESCE(s.likes, 0) * 10
-        END)
-        + COALESCE(s.reply_num, 0) * 3
+        --+ (CASE s.site WHEN 'HumorUniv' THEN COALESCE(s.likes, 0) ELSE COALESCE(s.likes, 0) * 10 END)
+        --+ COALESCE(s.reply_num, 0) * 3
         * CASE s.site
             -- 조회수 높은 커뮤니티 (가중치 낮춤)
             WHEN 'Ruliweb' THEN 0.5
