@@ -164,40 +164,24 @@ public class ShoooqController : ControllerBase
     /// 조정된 스코어 하드코딩 문자열
     /// </summary>
     private static readonly string GetScaledScore2 = @"
-        (CASE s.site
-            WHEN 'TheQoo' THEN COALESCE(s.views, 0) / 10
-            WHEN 'YouTube' THEN COALESCE(s.views, 0) / 100
-            WHEN 'HumorUniv' THEN COALESCE(s.views, 0) / 900
-            WHEN 'Ruliweb' THEN COALESCE(s.views, 0) / 100
-            WHEN 'FMKorea' THEN COALESCE(s.views, 0) / 800
-            ELSE COALESCE(s.views, 0)
-        END)
+        COALESCE(s.views, 0)
         --+ (CASE s.site WHEN 'HumorUniv' THEN COALESCE(s.likes, 0) ELSE COALESCE(s.likes, 0) * 10 END)
         --+ COALESCE(s.reply_num, 0) * 3
         * CASE s.site
-            -- 조회수 높은 커뮤니티 (가중치 낮춤)
-            WHEN 'Ruliweb' THEN 0.5
-            WHEN 'Ppomppu' THEN 0.5
-            WHEN 'BobeDream' THEN 0.5
-            
-            -- 조회수 중상위 커뮤니티 (가중치 조절)
-            WHEN 'HumorUniv' THEN 0
-            WHEN 'StrClub' THEN 5
-
-            -- 조회수 중간 (가중치 조금 높임)
+            WHEN 'Ruliweb' THEN 4
+            WHEN 'Ppomppu' THEN 3
+            WHEN 'BobaeDream' THEN 7
+            WHEN 'TheQoo' THEN 3
+            WHEN 'HumorUniv' THEN 1
+            WHEN 'SlrClub' THEN 20
             WHEN 'Clien' THEN 30
             WHEN 'Inven' THEN 30
-            WHEN 'Damoang' THEN 10
-            WHEN '82Cook' THEN 5
-
-            -- 조회수 낮은 커뮤니티 (가중치 높임)
+            WHEN 'Damoang' THEN 32
+            WHEN '82Cook' THEN 30
             WHEN 'TodayHumor' THEN 50
-            
-            -- 2ㅉ
-            WHEN 'MlbPark' THEN 0.0
-            WHEN 'FMKorea' THEN 0.0
-            
-            ELSE 0.0
+            WHEN 'MlbPark' THEN 5
+            WHEN 'FMKorea' THEN 1
+            ELSE 1
         END
         ";
 
