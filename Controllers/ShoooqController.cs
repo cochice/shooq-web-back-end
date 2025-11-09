@@ -193,6 +193,7 @@ public class ShoooqController : ControllerBase
     /// <param name="site">단일 사이트 필터</param>
     /// <param name="keyword">검색 키워드</param>
     /// <param name="author">작성자 필터</param>
+    /// <param name="maxNo">중복 방지를 위한 최대 no 값 (실시간 업데이트 시 사용)</param>
     /// <returns>페이징된 게시물 목록</returns>
     [HttpGet("posts")]
     public async Task<ActionResult<PagedResult<SiteBbsInfo>>> GetPostsPs(
@@ -200,7 +201,8 @@ public class ShoooqController : ControllerBase
         int pageSize = 10,
         string? site = null,
         string? keyword = null,
-        string? author = null)
+        string? author = null,
+        long? maxNo = null)
     {
         try
         {
@@ -238,6 +240,7 @@ public class ShoooqController : ControllerBase
                     WHERE s.posted_dt >= cst.now_time - INTERVAL '24 hours'
                     AND (@p_site IS NULL OR @p_site = '' OR s.site = @p_site)
                     AND s.site NOT IN ('NaverNews', 'GoogleNews')
+                    AND (@p_max_no IS NULL OR s.""no"" <= @p_max_no)
                     AND (
                             @p_keyword IS NULL OR @p_keyword = ''
                             OR s.title ILIKE '%' || @p_keyword || '%'
@@ -263,14 +266,16 @@ public class ShoooqController : ControllerBase
                 p_site = site,
                 p_keyword = string.IsNullOrWhiteSpace(keyword) ? null : keyword,
                 p_page_index = pageIndex,
-                p_page_count = pageSize
+                p_page_count = pageSize,
+                p_max_no = maxNo
             };
 
-            _logger.LogInformation("API Call: /api/posts - Parameters: Site={site}, Keyword={Keyword}, PageIndex={PageIndex}, PageSize={PageSize}",
+            _logger.LogInformation("API Call: /api/posts - Parameters: Site={site}, Keyword={Keyword}, PageIndex={PageIndex}, PageSize={PageSize}, MaxNo={MaxNo}",
                 site,
                 keyword ?? "NULL",
                 pageIndex,
-                pageSize);
+                pageSize,
+                maxNo?.ToString() ?? "NULL");
 
             var posts = await connection.QueryAsync<dynamic>(sql, parameters);
             var postsList = posts.ToList();
