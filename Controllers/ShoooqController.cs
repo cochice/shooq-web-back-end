@@ -170,7 +170,7 @@ public class ShoooqController : ControllerBase
         * CASE s.site
             WHEN 'Ruliweb' THEN 4
             WHEN 'Ppomppu' THEN 3
-            WHEN 'BobaeDream' THEN 7
+            WHEN 'BobaeDream' THEN 9
             WHEN 'TheQoo' THEN 3
             WHEN 'HumorUniv' THEN 1
             WHEN 'SlrClub' THEN 20
