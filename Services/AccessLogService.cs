@@ -2,17 +2,24 @@ using Microsoft.EntityFrameworkCore;
 using Marvin.Tmtmfh91.Web.BackEnd.Data;
 using Marvin.Tmtmfh91.Web.Backend.Models;
 using System.Net;
+using Dapper;
+using Npgsql;
 
 namespace Marvin.Tmtmfh91.Web.Backend.Services;
 
 public class AccessLogService
 {
+    private readonly IConfiguration _configuration;
     private readonly ApplicationDbContext _context;
     private static readonly TimeZoneInfo KstTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Seoul");
+    private readonly Lazy<string> _connectionString;
 
-    public AccessLogService(ApplicationDbContext context)
+    public AccessLogService(ApplicationDbContext context, IConfiguration configuration)
     {
         _context = context;
+        _configuration = configuration;
+        _connectionString = new Lazy<string>(() =>
+            Environment.GetEnvironmentVariable("DATABASE_URL") ?? _configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Database connection string not found"));
     }
 
     private DateTime GetKoreanTime()
@@ -66,17 +73,10 @@ public class AccessLogService
 
     public async Task<int> GetTodayVisitorsAsync()
     {
-        var koreanNow = GetKoreanTime();
-        var today = koreanNow.Date;
-        var tomorrow = today.AddDays(1);
-
-        // 한국 시간을 UTC로 변환하여 데이터베이스 쿼리에서 비교
-        var todayUtc = TimeZoneInfo.ConvertTimeToUtc(today, KstTimeZone);
-        var tomorrowUtc = TimeZoneInfo.ConvertTimeToUtc(tomorrow, KstTimeZone);
-
-        return await _context.WebsiteAccessLogs
-            .Where(log => log.LastAccessTime >= todayUtc && log.LastAccessTime < tomorrowUtc)
-            .CountAsync();
+        using var connection = new NpgsqlConnection(_connectionString.Value);
+        string YYYYMMDD = $"{DateTime.Now:yyyyMMdd}";
+        var sql = "SELECT COUNT(*) CNT FROM public.website_access_log wal WHERE to_char(last_access_time, 'YYYYMMDD') = @YYYYMMDD";
+        return await connection.QuerySingleAsync<int>(sql, new { YYYYMMDD = YYYYMMDD });
     }
 
     public async Task<List<WebsiteAccessLog>> GetRecentAccessLogsAsync(int count = 10)

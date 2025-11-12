@@ -17,6 +17,7 @@ public class ShoooqController : ControllerBase
     private readonly ILogger<ShoooqController> _logger;
     private readonly AccessLogService _accessLogService;
     private readonly IConfiguration _configuration;
+    private readonly Lazy<string> _connectionString;
 
     public ShoooqController(ApplicationDbContext context, ILogger<ShoooqController> logger, AccessLogService accessLogService, IConfiguration configuration, ShooqService shooqService)
     {
@@ -25,6 +26,8 @@ public class ShoooqController : ControllerBase
         _accessLogService = accessLogService;
         _configuration = configuration;
         _shooqService = shooqService;
+        _connectionString = new Lazy<string>(() =>
+            Environment.GetEnvironmentVariable("DATABASE_URL") ?? _configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Database connection string not found"));
     }
 
     [HttpGet("test")]
@@ -74,9 +77,7 @@ public class ShoooqController : ControllerBase
                 _ => null
             };
 
-            var connectionString = Environment.GetEnvironmentVariable("DATABASE_URL") ??
-                                  _configuration.GetConnectionString("DefaultConnection");
-            using var connection = new NpgsqlConnection(connectionString);
+            using var connection = new NpgsqlConnection(_connectionString.Value);
             await connection.OpenAsync();
             var pageIndex = (page - 1) * pageSize;
             var dataSql = $@"
@@ -133,36 +134,6 @@ public class ShoooqController : ControllerBase
     /// <summary>
     /// 조정된 스코어 하드코딩 문자열
     /// </summary>
-    // private static readonly string GetScaledScore = @"
-    //     -- 조회수 높은 커뮤니티 (가중치 낮춤)
-    //     WHEN 'TheQoo' THEN 1.5
-    //     WHEN 'Ruliweb' THEN 0.5
-    //     WHEN 'Ppomppu' THEN 0.5
-    //     WHEN 'BobeDream' THEN 0.5
-
-    //     -- 조회수 중상위 커뮤니티 (가중치 조절)
-    //     WHEN 'HumorUniv' THEN 2.0 * 2
-    //     WHEN 'StrClub' THEN 2.0
-
-    //     -- 조회수 중간 (가중치 조금 높임)
-    //     WHEN 'Clien' THEN 5.0 * 2
-    //     WHEN 'Inven' THEN 5.0 * 2
-    //     WHEN 'Damoang' THEN 5.0
-    //     WHEN '82Cook' THEN 5.0
-
-    //     -- 조회수 낮은 커뮤니티 (가중치 높임)
-    //     WHEN 'TodayHumor' THEN 9.0
-
-    //     -- 2ㅉ
-    //     WHEN 'MlbPark' THEN 0.0
-    //     WHEN 'FMKorea' THEN -10.0
-
-    //     ELSE 0.0
-    //     ";
-
-    /// <summary>
-    /// 조정된 스코어 하드코딩 문자열
-    /// </summary>
     private static readonly string GetScaledScore2 = @"
         COALESCE(s.views, 0)
         --+ (CASE s.site WHEN 'HumorUniv' THEN COALESCE(s.likes, 0) ELSE COALESCE(s.likes, 0) * 10 END)
@@ -209,9 +180,7 @@ public class ShoooqController : ControllerBase
             if (page < 1) page = 1;
             if (pageSize < 1 || pageSize > 100) pageSize = 10;
 
-            var connectionString = Environment.GetEnvironmentVariable("DATABASE_URL") ??
-                                  _configuration.GetConnectionString("DefaultConnection");
-            using var connection = new NpgsqlConnection(connectionString);
+            using var connection = new NpgsqlConnection(_connectionString.Value);
             await connection.OpenAsync();
 
             var pageIndex = page - 1;
@@ -349,8 +318,7 @@ public class ShoooqController : ControllerBase
     {
         try
         {
-            var connectionString = Environment.GetEnvironmentVariable("DATABASE_URL") ?? _configuration.GetConnectionString("DefaultConnection");
-            using var connection = new NpgsqlConnection(connectionString);
+            using var connection = new NpgsqlConnection(_connectionString.Value);
             await connection.OpenAsync();
 
             #region [ Query ]
@@ -558,9 +526,7 @@ public class ShoooqController : ControllerBase
             if (page < 1) page = 1;
             if (pageSize < 1 || pageSize > 100) pageSize = 10;
 
-            var connectionString = Environment.GetEnvironmentVariable("DATABASE_URL") ??
-                                  _configuration.GetConnectionString("DefaultConnection");
-            using var connection = new NpgsqlConnection(connectionString);
+            using var connection = new NpgsqlConnection(_connectionString.Value);
             await connection.OpenAsync();
 
             var pageIndex = page - 1;
@@ -711,8 +677,7 @@ public class ShoooqController : ControllerBase
                 (startDate, endDate) = year.CalculateWeekRange(month, week);
             }
 
-            var connectionString = Environment.GetEnvironmentVariable("DATABASE_URL") ?? _configuration.GetConnectionString("DefaultConnection");
-            using var connection = new NpgsqlConnection(connectionString);
+            using var connection = new NpgsqlConnection(_connectionString.Value);
             await connection.OpenAsync();
 
             #region [ Query ]
@@ -1113,9 +1078,7 @@ public class ShoooqController : ControllerBase
     [HttpGet("sites")]
     public async Task<ActionResult<IEnumerable<string>>> GetSites()
     {
-        var connectionString = Environment.GetEnvironmentVariable("DATABASE_URL") ??
-                              _configuration.GetConnectionString("DefaultConnection");
-        using var connection = new NpgsqlConnection(connectionString);
+        using var connection = new NpgsqlConnection(_connectionString.Value);
         await connection.OpenAsync();
 
         var sql = @"
