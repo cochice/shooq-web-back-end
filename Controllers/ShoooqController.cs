@@ -1112,35 +1112,19 @@ public class ShoooqController : ControllerBase
     {
         try
         {
-            // 커뮤니티 게시물 수 (NaverNews, GoogleNews 제외)
-            var communityPosts = await _context.SiteBbsInfos
-                .Where(x => x.site != "NaverNews" && x.site != "GoogleNews")
-                .CountAsync();
+            using var connection = new NpgsqlConnection(_connectionString.Value);
 
-            // 뉴스 게시물 수 (NaverNews, GoogleNews 포함)
-            var newsPosts = await _context.SiteBbsInfos
-                .Where(x => x.site == "NaverNews" || x.site == "GoogleNews")
-                .CountAsync();
+            var sql = @"
+                SELECT
+                    COUNT(*) FILTER (WHERE site NOT IN ('NaverNews', 'GoogleNews')) AS ""communityPosts"",
+                    COUNT(*) FILTER (WHERE site IN ('NaverNews', 'GoogleNews')) AS ""newsPosts"",
+                    COUNT(*) AS ""totalPosts"",
+                    COUNT(DISTINCT site) FILTER (WHERE site NOT IN ('NaverNews', 'GoogleNews')) AS ""communitySites"",
+                    COUNT(DISTINCT site) FILTER (WHERE site IN ('NaverNews', 'GoogleNews')) AS ""newsSites"",
+                    COUNT(DISTINCT site) AS ""activeSites""
+                FROM tmtmfhgi.site_bbs_info;";
 
-            // 총 게시물 수 (뉴스 포함)
-            var totalPosts = communityPosts + newsPosts;
-
-            // 커뮤니티 활성 사이트 수 (NaverNews, GoogleNews 제외)
-            var communitySites = await _context.SiteBbsInfos
-                .Where(x => x.site != "NaverNews" && x.site != "GoogleNews")
-                .Select(x => x.site)
-                .Distinct()
-                .CountAsync();
-
-            // 뉴스 활성 사이트 수 (NaverNews, GoogleNews 포함)
-            var newsSites = await _context.SiteBbsInfos
-                .Where(x => x.site == "NaverNews" || x.site == "GoogleNews")
-                .Select(x => x.site)
-                .Distinct()
-                .CountAsync();
-
-            // 총 활성 사이트 수 (뉴스 포함)
-            var activeSites = communitySites + newsSites;
+            var result = await connection.QuerySingleAsync<dynamic>(sql);
 
             // 총 방문자 수
             var totalVisitors = await _accessLogService.GetTotalVisitorsAsync();
@@ -1153,15 +1137,15 @@ public class ShoooqController : ControllerBase
 
             var stats = new
             {
-                totalPosts,
-                communityPosts,
-                newsPosts,
-                activeSites,
-                communitySites,
-                newsSites,
+                totalPosts = (int)result.totalPosts,
+                communityPosts = (int)result.communityPosts,
+                newsPosts = (int)result.newsPosts,
+                activeSites = (int)result.activeSites,
+                communitySites = (int)result.communitySites,
+                newsSites = (int)result.newsSites,
                 totalVisitors,
                 todayVisitors,
-                dailyViews = totalAccess, // 총 접속수를 일일 조회수로 사용
+                dailyViews = totalAccess,
                 systemStatus = "정상"
             };
 
@@ -1179,27 +1163,22 @@ public class ShoooqController : ControllerBase
     {
         try
         {
-            // 오늘 날짜 (UTC)
-            var today = DateTime.UtcNow.Date;
-            var tomorrow = today.AddDays(1);
-            var todayUtc = DateTime.SpecifyKind(today, DateTimeKind.Utc);
-            var tomorrowUtc = DateTime.SpecifyKind(tomorrow, DateTimeKind.Utc);
+            using var connection = new NpgsqlConnection(_connectionString.Value);
 
-            var siteStats = await _context.SiteBbsInfos
-                .Where(x => !string.IsNullOrEmpty(x.site) &&
-                           x.site != "NaverNews" && x.site != "GoogleNews")
-                .GroupBy(x => x.site)
-                .Select(g => new
-                {
-                    site = g.Key,
-                    postCount = g.Count(),
-                    todayCount = g.Count(x => x.reg_date.HasValue &&
-                                             x.reg_date.Value >= todayUtc &&
-                                             x.reg_date.Value < tomorrowUtc),
-                    lastPostDate = g.Max(x => x.reg_date)
-                })
-                .OrderByDescending(x => x.postCount)
-                .ToListAsync();
+            var sql = @"
+                SELECT
+                    site,
+                    COUNT(*) AS ""postCount"",
+                    COUNT(*) FILTER (WHERE DATE(reg_date AT TIME ZONE 'Asia/Seoul') = CURRENT_DATE) AS ""todayCount"",
+                    MAX(reg_date) AS ""lastPostDate""
+                FROM tmtmfhgi.site_bbs_info
+                WHERE site IS NOT NULL
+                    AND site != ''
+                    AND site NOT IN ('NaverNews', 'GoogleNews')
+                GROUP BY site
+                ORDER BY ""postCount"" DESC;";
+
+            var siteStats = await connection.QueryAsync(sql);
 
             return Ok(siteStats);
         }
@@ -1217,19 +1196,16 @@ public class ShoooqController : ControllerBase
         {
             if (count < 1 || count > 50) count = 5;
 
-            var recentPosts = await _context.SiteBbsInfos
-                .Where(x => x.site != "NaverNews" && x.site != "GoogleNews")
-                .OrderByDescending(x => x.reg_date)
-                .Take(count)
-                .Select(x => new
-                {
-                    no = x.no,
-                    title = x.title,
-                    date = x.date,
-                    regDate = x.reg_date,
-                    site = x.site
-                })
-                .ToListAsync();
+            using var connection = new NpgsqlConnection(_connectionString.Value);
+
+            var sql = @"
+                SELECT ""no"", title, ""date"", reg_date, site
+                FROM tmtmfhgi.site_bbs_info
+                WHERE site NOT IN ('NaverNews', 'GoogleNews')
+                ORDER BY reg_date DESC
+                LIMIT @Count;";
+
+            var recentPosts = await connection.QueryAsync(sql, new { Count = count });
 
             return Ok(recentPosts);
         }
@@ -1247,27 +1223,21 @@ public class ShoooqController : ControllerBase
         {
             if (count < 1 || count > 50) count = 5;
 
-            var recentPosts = await _context.SiteBbsInfos
-                .Where(x => !string.IsNullOrEmpty(x.date) && x.site != "NaverNews" && x.site != "GoogleNews")
-                .Select(x => new { x.no, x.title, x.date, x.reg_date, x.site })
-                .ToListAsync();
+            using var connection = new NpgsqlConnection(_connectionString.Value);
 
-            // Date 필드를 DateTime으로 파싱하여 정렬
-            var sortedPosts = recentPosts
-                .Where(x => DateTime.TryParse(x.date, out _))
-                .OrderByDescending(x => DateTime.Parse(x.date!))
-                .Take(count)
-                .Select(x => new
-                {
-                    no = x.no,
-                    title = x.title,
-                    date = x.date,
-                    regDate = x.reg_date,
-                    site = x.site
-                })
-                .ToList();
+            var sql = @"
+                SELECT ""no"", title, ""date"", reg_date, site
+                FROM tmtmfhgi.site_bbs_info
+                WHERE ""date"" IS NOT NULL
+                    AND ""date"" != ''
+                    AND site NOT IN ('NaverNews', 'GoogleNews')
+                    AND ""date"" ~ '^\d{4}-\d{2}-\d{2}'
+                ORDER BY TO_TIMESTAMP(""date"", 'YYYY-MM-DD HH24:MI:SS') DESC
+                LIMIT @Count;";
 
-            return Ok(sortedPosts);
+            var recentPosts = await connection.QueryAsync(sql, new { Count = count });
+
+            return Ok(recentPosts);
         }
         catch (Exception ex)
         {
@@ -1281,33 +1251,27 @@ public class ShoooqController : ControllerBase
     {
         try
         {
-            // 현재 시간 기준 최근 7일간의 날짜 생성 (UTC로 변환)
-            var today = DateTime.UtcNow.Date;
-            var weeklyStats = new List<object>();
+            using var connection = new NpgsqlConnection(_connectionString.Value);
 
-            for (int i = 6; i >= 0; i--)
-            {
-                var targetDate = today.AddDays(-i);
-                var nextDate = targetDate.AddDays(1);
+            var sql = @"
+                WITH dates AS (
+                    SELECT generate_series(
+                        CURRENT_DATE - INTERVAL '6 days',
+                        CURRENT_DATE,
+                        '1 day'::interval
+                    )::date AS date
+                )
+                SELECT
+                    TO_CHAR(d.date, 'YYYY-MM-DD') AS date,
+                    COUNT(s.""no"") AS count
+                FROM dates d
+                LEFT JOIN tmtmfhgi.site_bbs_info s
+                    ON DATE(s.reg_date AT TIME ZONE 'Asia/Seoul') = d.date
+                    AND s.site NOT IN ('NaverNews', 'GoogleNews')
+                GROUP BY d.date
+                ORDER BY d.date;";
 
-                // UTC 시간으로 변환하여 비교
-                var targetDateUtc = DateTime.SpecifyKind(targetDate, DateTimeKind.Utc);
-                var nextDateUtc = DateTime.SpecifyKind(nextDate, DateTimeKind.Utc);
-
-                // 해당 날짜에 크롤링된 게시물 개수 계산 (RegDate 기준, NaverNews, GoogleNews 제외)
-                var count = await _context.SiteBbsInfos
-                    .Where(x => x.reg_date.HasValue &&
-                               x.reg_date.Value >= targetDateUtc &&
-                               x.reg_date.Value < nextDateUtc &&
-                               x.site != "NaverNews" && x.site != "GoogleNews")
-                    .CountAsync();
-
-                weeklyStats.Add(new
-                {
-                    date = targetDate.ToString("yyyy-MM-dd"),
-                    count = count
-                });
-            }
+            var weeklyStats = await connection.QueryAsync(sql);
 
             return Ok(weeklyStats);
         }
@@ -1323,29 +1287,22 @@ public class ShoooqController : ControllerBase
     {
         try
         {
-            // 오늘 날짜 (UTC)
-            var today = DateTime.UtcNow.Date;
-            var tomorrow = today.AddDays(1);
+            using var connection = new NpgsqlConnection(_connectionString.Value);
 
-            // UTC 시간으로 변환
-            var todayUtc = DateTime.SpecifyKind(today, DateTimeKind.Utc);
-            var tomorrowUtc = DateTime.SpecifyKind(tomorrow, DateTimeKind.Utc);
+            var sql = @"
+                SELECT
+                    site,
+                    COUNT(*) AS count
+                FROM tmtmfhgi.site_bbs_info
+                WHERE reg_date IS NOT NULL
+                    AND DATE(reg_date AT TIME ZONE 'Asia/Seoul') = CURRENT_DATE
+                    AND site IS NOT NULL
+                    AND site != ''
+                    AND site NOT IN ('NaverNews', 'GoogleNews')
+                GROUP BY site
+                ORDER BY count DESC;";
 
-            // 오늘 하루 사이트별 크롤링 개수 (NaverNews, GoogleNews 제외)
-            var siteStats = await _context.SiteBbsInfos
-                .Where(x => x.reg_date.HasValue &&
-                           x.reg_date.Value >= todayUtc &&
-                           x.reg_date.Value < tomorrowUtc &&
-                           !string.IsNullOrEmpty(x.site) &&
-                           x.site != "NaverNews" && x.site != "GoogleNews")
-                .GroupBy(x => x.site)
-                .Select(g => new
-                {
-                    site = g.Key,
-                    count = g.Count()
-                })
-                .OrderByDescending(x => x.count)
-                .ToListAsync();
+            var siteStats = await connection.QueryAsync(sql);
 
             return Ok(siteStats);
         }
@@ -1361,24 +1318,19 @@ public class ShoooqController : ControllerBase
     {
         try
         {
-            // 오늘 날짜 (UTC)
-            var today = DateTime.UtcNow.Date;
-            var tomorrow = today.AddDays(1);
+            using var connection = new NpgsqlConnection(_connectionString.Value);
 
-            // UTC 시간으로 변환
-            var todayUtc = DateTime.SpecifyKind(today, DateTimeKind.Utc);
-            var tomorrowUtc = DateTime.SpecifyKind(tomorrow, DateTimeKind.Utc);
+            var sql = @"
+                SELECT MAX(reg_date) AS latest_crawl_time
+                FROM tmtmfhgi.site_bbs_info
+                WHERE reg_date IS NOT NULL
+                    AND DATE(reg_date AT TIME ZONE 'Asia/Seoul') = CURRENT_DATE
+                    AND site IS NOT NULL
+                    AND site != ''
+                    AND site NOT IN ('NaverNews', 'GoogleNews');";
 
-            // 오늘 크롤링된 글 중 가장 최근 reg_date 조회 (NaverNews, GoogleNews 제외)
-            var latestCrawlTime = await _context.SiteBbsInfos
-                .Where(x => x.reg_date.HasValue &&
-                           x.reg_date.Value >= todayUtc &&
-                           x.reg_date.Value < tomorrowUtc &&
-                           !string.IsNullOrEmpty(x.site) &&
-                           x.site != "NaverNews" && x.site != "GoogleNews")
-                .OrderByDescending(x => x.reg_date)
-                .Select(x => x.reg_date)
-                .FirstOrDefaultAsync();
+            var result = await connection.QuerySingleOrDefaultAsync<dynamic>(sql);
+            var latestCrawlTime = result?.latest_crawl_time;
 
             return Ok(new { latestCrawlTime });
         }
