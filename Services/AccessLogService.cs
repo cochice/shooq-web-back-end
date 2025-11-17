@@ -29,36 +29,29 @@ public class AccessLogService
 
     public async Task LogAccessAsync(IPAddress ipAddress)
     {
-        var koreanNow = GetKoreanTime();
-        var koreanNowUtc = TimeZoneInfo.ConvertTimeToUtc(koreanNow, KstTimeZone);
+        using var connection = new NpgsqlConnection(_connectionString.Value);
 
-        var existingLog = await _context.WebsiteAccessLogs
-            .FirstOrDefaultAsync(log => log.IpAddress.Equals(ipAddress));
+        var sql = @"
+            MERGE INTO public.website_access_log AS target
+            USING (SELECT @IpAddress::inet AS ip_address) AS source
+            ON target.ip_address = source.ip_address
+            WHEN MATCHED THEN
+                UPDATE SET
+                    access_count = target.access_count + 1,
+                    last_access_time = timezone('Asia/Seoul', CURRENT_TIMESTAMP),
+                    updated_at = timezone('Asia/Seoul', CURRENT_TIMESTAMP)
+            WHEN NOT MATCHED THEN
+                INSERT (ip_address, access_count, first_access_time, last_access_time, created_at, updated_at)
+                VALUES (
+                    source.ip_address,
+                    1,
+                    timezone('Asia/Seoul', CURRENT_TIMESTAMP),
+                    timezone('Asia/Seoul', CURRENT_TIMESTAMP),
+                    timezone('Asia/Seoul', CURRENT_TIMESTAMP),
+                    timezone('Asia/Seoul', CURRENT_TIMESTAMP)
+                );";
 
-        if (existingLog != null)
-        {
-            // 기존 IP 주소인 경우 접속 횟수 증가
-            existingLog.AccessCount++;
-            existingLog.LastAccessTime = koreanNowUtc;
-            existingLog.UpdatedAt = koreanNowUtc;
-        }
-        else
-        {
-            // 새로운 IP 주소인 경우 새 레코드 생성
-            var newLog = new WebsiteAccessLog
-            {
-                IpAddress = ipAddress,
-                AccessCount = 1,
-                FirstAccessTime = koreanNowUtc,
-                LastAccessTime = koreanNowUtc,
-                CreatedAt = koreanNowUtc,
-                UpdatedAt = koreanNowUtc
-            };
-
-            _context.WebsiteAccessLogs.Add(newLog);
-        }
-
-        await _context.SaveChangesAsync();
+        await connection.ExecuteAsync(sql, new { IpAddress = ipAddress.ToString() });
     }
 
     public async Task<int> GetTotalVisitorsAsync()
