@@ -300,6 +300,72 @@ public class ShoooqController : ControllerBase
     }
 
     /// <summary>
+    /// 특정 게시물을 조회합니다.
+    /// </summary>
+    /// <param name="no">게시물 번호</param>
+    /// <returns>게시물 상세 정보</returns>
+    [HttpGet("posts/{no}")]
+    public async Task<ActionResult<SiteBbsInfo>> GetPost(long no)
+    {
+        try
+        {
+            using var connection = new NpgsqlConnection(_connectionString.Value);
+            await connection.OpenAsync();
+
+            var sql = @"
+                SELECT
+                    s.""no"", s.""number"", s.title, s.author, s.""date"", s.""views"",
+                    s.likes, s.url, s.site, s.reg_date, s.reply_num, s.""content"", s.posted_dt,
+                    oi.cloudinary_url
+                FROM tmtmfhgi.site_bbs_info s
+                LEFT JOIN tmtmfhgi.optimized_images oi ON s.img1 = oi.id
+                WHERE s.""no"" = @p_no
+            ";
+
+            var parameters = new { p_no = no };
+
+            _logger.LogInformation("API Call: /api/posts/{No} - Parameters: No={No}", no, no);
+
+            var post = await connection.QueryFirstOrDefaultAsync<dynamic>(sql, parameters);
+
+            if (post == null)
+            {
+                return NotFound(new { message = $"Post with no={no} not found" });
+            }
+
+            // Fetch optimized images
+            var optimizedImages = await _shooqService.GetOptimizedImagesAsync((int)post.no);
+
+            // Convert dynamic object to SiteBbsInfo object
+            var siteBbsInfo = new SiteBbsInfo
+            {
+                no = (long)post.no,
+                number = post.number != null ? (long?)post.number : null,
+                title = post.title,
+                author = post.author,
+                date = post.date,
+                views = post.views != null ? (int?)Convert.ToInt32(post.views) : null,
+                likes = post.likes != null ? (int?)Convert.ToInt32(post.likes) : null,
+                url = post.url,
+                site = post.site,
+                reg_date = post.reg_date != null ? (DateTime?)post.reg_date : null,
+                reply_num = post.reply_num != null ? (int?)Convert.ToInt32(post.reply_num) : null,
+                content = post.content,
+                posted_dt = post.posted_dt != null ? ((DateTime)post.posted_dt).ToString("yyyy-MM-dd HH:mm:ss") : null,
+                cloudinary_url = post.cloudinary_url,
+                OptimizedImagesList = optimizedImages
+            };
+
+            return Ok(siteBbsInfo);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching post with no={No}", no);
+            return StatusCode(500, new { message = "An error occurred while fetching the post", error = ex.Message });
+        }
+    }
+
+    /// <summary>
     /// 게시물 목록을 조회합니다. (Prepared Statement 방식)
     /// </summary>
     /// <param name="page">페이지 번호 (기본값: 1)</param>
@@ -1059,20 +1125,6 @@ public class ShoooqController : ControllerBase
             _logger.LogError(ex, "Error in GetPostsPs API: {Message}", ex.Message);
             return StatusCode(500, new { message = "Internal server error", details = ex.Message });
         }
-    }
-
-    [HttpGet("{no:long}")]
-    public async Task<ActionResult<SiteBbsInfo>> GetPost(long no)
-    {
-        var post = await _context.SiteBbsInfos
-            .FirstOrDefaultAsync(x => x.no == no);
-
-        if (post == null)
-        {
-            return NotFound();
-        }
-
-        return Ok(post);
     }
 
     [HttpGet("sites")]
