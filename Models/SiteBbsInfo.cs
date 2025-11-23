@@ -80,4 +80,7 @@ public class OptimizedImages
 
     [Column("no")]
     public long? no { get; set; }
+
+    [Column("media_type")]
+    public string? media_type { get; set; }  // 'image' or 'video'
 }
