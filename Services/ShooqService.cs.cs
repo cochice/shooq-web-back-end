@@ -25,14 +25,15 @@ public class ShooqService
 
         var sql = @"
             SELECT
-                id, 
-                cloudinary_url, 
+                id,
+                cloudinary_url,
                 NO,
-                CASE 
+                CASE
                     WHEN cloudinary_url IS NOT NULL THEN
-                        CASE 
+                        CASE
                             WHEN cloudinary_url ~* '\.(jpg|jpeg|png|gif|webp|svg|bmp)$' THEN 'image'
                             WHEN cloudinary_url ~* '\.(mp4|avi|mov|wmv|flv|webm|mkv)$' THEN 'video'
+                            WHEN cloudinary_url ~* '(youtube\.com|youtu\.be)' THEN 'video'
                             ELSE NULL
                         END
                     ELSE NULL
