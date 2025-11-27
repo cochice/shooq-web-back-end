@@ -32,7 +32,7 @@ public class AccessLogService
         using var connection = new NpgsqlConnection(_connectionString.Value);
 
         var sql = @"
-            MERGE INTO public.website_access_log AS target
+            MERGE INTO tmtmfhgi.website_access_log AS target
             USING (SELECT @IpAddress::inet AS ip_address) AS source
             ON target.ip_address = source.ip_address
             WHEN MATCHED THEN
@@ -68,7 +68,7 @@ public class AccessLogService
     {
         using var connection = new NpgsqlConnection(_connectionString.Value);
         string YYYYMMDD = $"{DateTime.Now:yyyyMMdd}";
-        var sql = "SELECT COUNT(*) CNT FROM public.website_access_log wal WHERE to_char(last_access_time, 'YYYYMMDD') = @YYYYMMDD";
+        var sql = "SELECT COUNT(*) CNT FROM tmtmfhgi.website_access_log wal WHERE to_char(last_access_time, 'YYYYMMDD') = @YYYYMMDD";
         return await connection.QuerySingleAsync<int>(sql, new { YYYYMMDD = YYYYMMDD });
     }
 
