@@ -4,7 +4,7 @@ using System.Net;
 
 namespace Marvin.Tmtmfh91.Web.Backend.Models;
 
-[Table("website_access_log")]
+[Table("website_access_log", Schema = "tmtmfhgi")]
 public class WebsiteAccessLog
 {
     [Key]
