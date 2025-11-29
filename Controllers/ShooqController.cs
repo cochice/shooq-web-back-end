@@ -10,16 +10,41 @@ namespace Marvin.Tmtmfh91.Web.BackEnd.Controllers;
 
 [ApiController]
 [Route("api")]
-public class ShoooqController : ControllerBase
+public class ShooqController : ControllerBase
 {
     private readonly ShooqService _shooqService;
     private readonly ApplicationDbContext _context;
-    private readonly ILogger<ShoooqController> _logger;
+    private readonly ILogger<ShooqController> _logger;
     private readonly AccessLogService _accessLogService;
     private readonly IConfiguration _configuration;
     private readonly Lazy<string> _connectionString;
 
-    public ShoooqController(ApplicationDbContext context, ILogger<ShoooqController> logger, AccessLogService accessLogService, IConfiguration configuration, ShooqService shooqService)
+    /// <summary>
+    /// 조정된 스코어 하드코딩 문자열 (레거시 API용)
+    /// </summary>
+    private static readonly string GetScaledScore2 = @"
+        COALESCE(s.views, 0)
+        --+ (CASE s.site WHEN 'HumorUniv' THEN COALESCE(s.likes, 0) ELSE COALESCE(s.likes, 0) * 10 END)
+        --+ COALESCE(s.reply_num, 0) * 3
+        * CASE s.site
+            WHEN 'Ruliweb' THEN 4
+            WHEN 'Ppomppu' THEN 3
+            WHEN 'BobaeDream' THEN 9
+            WHEN 'TheQoo' THEN 3
+            WHEN 'HumorUniv' THEN 1
+            WHEN 'SlrClub' THEN 20
+            WHEN 'Clien' THEN 30
+            WHEN 'Inven' THEN 30
+            WHEN 'Damoang' THEN 32
+            WHEN '82Cook' THEN 30
+            WHEN 'TodayHumor' THEN 50
+            WHEN 'MlbPark' THEN 5
+            WHEN 'FMKorea' THEN 1
+            ELSE 1
+        END
+        ";
+
+    public ShooqController(ApplicationDbContext context, ILogger<ShooqController> logger, AccessLogService accessLogService, IConfiguration configuration, ShooqService shooqService)
     {
         _context = context;
         _logger = logger;
@@ -132,31 +157,6 @@ public class ShoooqController : ControllerBase
     }
 
     /// <summary>
-    /// 조정된 스코어 하드코딩 문자열
-    /// </summary>
-    private static readonly string GetScaledScore2 = @"
-        COALESCE(s.views, 0)
-        --+ (CASE s.site WHEN 'HumorUniv' THEN COALESCE(s.likes, 0) ELSE COALESCE(s.likes, 0) * 10 END)
-        --+ COALESCE(s.reply_num, 0) * 3
-        * CASE s.site
-            WHEN 'Ruliweb' THEN 4
-            WHEN 'Ppomppu' THEN 3
-            WHEN 'BobaeDream' THEN 9
-            WHEN 'TheQoo' THEN 3
-            WHEN 'HumorUniv' THEN 1
-            WHEN 'SlrClub' THEN 20
-            WHEN 'Clien' THEN 30
-            WHEN 'Inven' THEN 30
-            WHEN 'Damoang' THEN 32
-            WHEN '82Cook' THEN 30
-            WHEN 'TodayHumor' THEN 50
-            WHEN 'MlbPark' THEN 5
-            WHEN 'FMKorea' THEN 1
-            ELSE 1
-        END
-        ";
-
-    /// <summary>
     /// 게시물 목록을 조회합니다. (Prepared Statement 방식)
     /// </summary>
     /// <param name="page">페이지 번호 (기본값: 1)</param>
@@ -165,6 +165,8 @@ public class ShoooqController : ControllerBase
     /// <param name="keyword">검색 키워드</param>
     /// <param name="author">작성자 필터</param>
     /// <param name="maxNo">중복 방지를 위한 최대 no 값 (실시간 업데이트 시 사용)</param>
+    /// <param name="sortBy">정렬 방식: "hot" (인기순), "new" (최신순), "top" (추천순), "rising" (급상승)</param>
+    /// <param name="topPeriod">추천순 기간: "today" (오늘), "week" (이번주), "month" (이번달), "all" (전체)</param>
     /// <returns>페이징된 게시물 목록</returns>
     [HttpGet("posts")]
     public async Task<ActionResult<PagedResult<SiteBbsInfo>>> GetPostsPs(
@@ -173,115 +175,30 @@ public class ShoooqController : ControllerBase
         string? site = null,
         string? keyword = null,
         string? author = null,
-        long? maxNo = null)
+        long? maxNo = null,
+        string? sortBy = "hot",
+        string? topPeriod = "today")
     {
         try
         {
             if (page < 1) page = 1;
             if (pageSize < 1 || pageSize > 100) pageSize = 10;
 
-            using var connection = new NpgsqlConnection(_connectionString.Value);
-            await connection.OpenAsync();
-
-            var pageIndex = page - 1;
-            var sql = $@"
-                WITH current_seoul_time AS (
-                    SELECT timezone('Asia/Seoul', CURRENT_TIMESTAMP) as now_time
-                ),
-                filtered AS (
-                    SELECT
-                        s.""no"", s.""number"", s.title, s.author, s.""date"", s.""views"",
-                        s.likes, s.url, s.site, s.reg_date, s.reply_num, s.""content"", s.posted_dt,
-                        (
-                            {GetScaledScore2}
-                        ) AS score,
-                        CASE
-                            WHEN s.posted_dt >= cst.now_time - INTERVAL '1 hour' THEN 1
-                            WHEN s.posted_dt >= cst.now_time - INTERVAL '3 hours' THEN 3
-                            WHEN s.posted_dt >= cst.now_time - INTERVAL '9 hours' THEN 9
-                            WHEN s.posted_dt >= cst.now_time - INTERVAL '24 hours' THEN 24
-                            --WHEN s.posted_dt >= cst.now_time - INTERVAL '7 days' THEN 700
-                            ELSE 999
-                        END AS time_bucket_no, cloudinary_url
-                    FROM tmtmfhgi.site_bbs_info s
-                    LEFT JOIN tmtmfhgi.optimized_images oi ON s.img1 = oi.id
-                    CROSS JOIN current_seoul_time cst
-                    WHERE s.posted_dt >= cst.now_time - INTERVAL '24 hours'
-                    AND (@p_site IS NULL OR @p_site = '' OR s.site = @p_site)
-                    AND s.site NOT IN ('NaverNews', 'GoogleNews')
-                    AND (@p_max_no IS NULL OR s.""no"" <= @p_max_no)
-                    AND (
-                            @p_keyword IS NULL OR @p_keyword = ''
-                            OR s.title ILIKE '%' || @p_keyword || '%'
-                            OR s.""content"" ILIKE '%' || @p_keyword || '%'
-                    )
-                ),
-                counted AS (
-                    SELECT *, COUNT(*) OVER() as total_count
-                    FROM filtered
-                )
-                SELECT DISTINCT
-                    c.score, c.time_bucket_no, c.posted_dt, c.site, c.reg_date, c.reply_num,
-                    c.""no"", c.""number"", c.title, c.author, c.""date"", c.""views"", c.likes,
-                    c.url, c.""content"", c.total_count, c.cloudinary_url
-                FROM counted c
-                ORDER BY c.time_bucket_no ASC, c.score DESC
-                OFFSET (@p_page_index * @p_page_count)
-                LIMIT @p_page_count
-            ";
-
-            var parameters = new
-            {
-                p_site = site,
-                p_keyword = string.IsNullOrWhiteSpace(keyword) ? null : keyword,
-                p_page_index = pageIndex,
-                p_page_count = pageSize,
-                p_max_no = maxNo
-            };
-
-            _logger.LogInformation("API Call: /api/posts - Parameters: Site={site}, Keyword={Keyword}, PageIndex={PageIndex}, PageSize={PageSize}, MaxNo={MaxNo}",
+            _logger.LogInformation("API Call: /api/posts - Parameters: Site={site}, Keyword={Keyword}, Page={Page}, PageSize={PageSize}, MaxNo={MaxNo}, SortBy={SortBy}, TopPeriod={TopPeriod}",
                 site,
                 keyword ?? "NULL",
-                pageIndex,
+                page,
                 pageSize,
-                maxNo?.ToString() ?? "NULL");
+                maxNo?.ToString() ?? "NULL",
+                sortBy ?? "hot",
+                topPeriod ?? "today");
 
-            var posts = await connection.QueryAsync<dynamic>(sql, parameters);
-            var postsList = posts.ToList();
-            var totalCount = postsList.FirstOrDefault()?.total_count != null ? Convert.ToInt32(postsList.FirstOrDefault()?.total_count) : 0;
+            var (posts, totalCount) = await _shooqService.GetPostsAsync(page, pageSize, site, keyword, author, maxNo, sortBy, topPeriod);
             var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
-
-            // Fetch all optimized images in parallel
-            var imagesTasks = postsList.Select(p => _shooqService.GetOptimizedImagesAsync((int)p.no)).ToList();
-            var imagesResults = await Task.WhenAll(imagesTasks);
-
-            // Convert dynamic objects to SiteBbsInfo objects
-            var siteBbsInfos = postsList.Select((p, index) => new SiteBbsInfo
-            {
-                no = (long)p.no,
-                number = p.number != null ? (long?)p.number : null,
-                title = p.title,
-                author = p.author,
-                date = p.date,
-                views = p.views != null ? (int?)Convert.ToInt32(p.views) : null,
-                likes = p.likes != null ? (int?)Convert.ToInt32(p.likes) : null,
-                url = p.url,
-                site = p.site,
-                reg_date = p.reg_date,
-                reply_num = p.reply_num != null ? (int?)Convert.ToInt32(p.reply_num) : null,
-                content = p.content,
-                posted_dt = p.posted_dt?.ToString(),
-                total_count = p.total_count != null ? (int?)Convert.ToInt32(p.total_count) : null,
-                score = p.score != null ? (long?)p.score : null,
-                time_bucket = p.time_bucket,
-                time_bucket_no = p.time_bucket_no != null ? (int?)Convert.ToInt32(p.time_bucket_no) : null,
-                cloudinary_url = p.cloudinary_url,
-                OptimizedImagesList = imagesResults[index]
-            }).ToList();
 
             var result = new PagedResult<SiteBbsInfo>
             {
-                Data = siteBbsInfos,
+                Data = posts,
                 Page = page,
                 PageSize = pageSize,
                 TotalCount = totalCount,
@@ -572,6 +489,66 @@ public class ShoooqController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in GetPostsPs API: {Message}", ex.Message);
+            return StatusCode(500, new { message = "Internal server error", details = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// 인기 게시물 목록을 조회합니다 (이미지/동영상이 있는 게시물만)
+    /// </summary>
+    /// <param name="page">페이지 번호 (기본값: 1)</param>
+    /// <param name="pageSize">페이지 크기 (기본값: 10, 최대: 100)</param>
+    /// <param name="site">단일 사이트 필터</param>
+    /// <param name="keyword">검색 키워드</param>
+    /// <param name="author">작성자 필터</param>
+    /// <param name="maxNo">중복 방지를 위한 최대 no 값</param>
+    /// <param name="sortBy">정렬 방식: "hot" (인기순), "new" (최신순), "top" (추천순), "rising" (급상승)</param>
+    /// <param name="topPeriod">추천순 기간: "today" (오늘), "week" (이번주), "month" (이번달), "all" (전체)</param>
+    /// <returns>인기 게시물 목록</returns>
+    [HttpGet("posts-popular")]
+    public async Task<ActionResult<PagedResult<SiteBbsInfo>>> GetPostsPopular(
+        int page = 1,
+        int pageSize = 10,
+        string? site = null,
+        string? keyword = null,
+        string? author = null,
+        long? maxNo = null,
+        string? sortBy = "hot",
+        string? topPeriod = "today")
+    {
+        try
+        {
+            if (page < 1) page = 1;
+            if (pageSize < 1 || pageSize > 100) pageSize = 10;
+
+            _logger.LogInformation("API Call: /api/posts-popular - Parameters: Site={site}, Keyword={Keyword}, Page={Page}, PageSize={PageSize}, MaxNo={MaxNo}, SortBy={SortBy}, TopPeriod={TopPeriod}",
+                site,
+                keyword ?? "NULL",
+                page,
+                pageSize,
+                maxNo?.ToString() ?? "NULL",
+                sortBy ?? "hot",
+                topPeriod ?? "today");
+
+            var (posts, totalCount) = await _shooqService.GetPostsAsync(page, pageSize, site, keyword, author, maxNo, sortBy, topPeriod, onlyWithMedia: true);
+            var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+
+            var result = new PagedResult<SiteBbsInfo>
+            {
+                Data = posts,
+                Page = page,
+                PageSize = pageSize,
+                TotalCount = totalCount,
+                TotalPages = totalPages,
+                HasNextPage = page < totalPages,
+                HasPreviousPage = page > 1
+            };
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in GetPostsPopular API: {Message}", ex.Message);
             return StatusCode(500, new { message = "Internal server error", details = ex.Message });
         }
     }
@@ -1144,21 +1121,6 @@ public class ShoooqController : ControllerBase
         return Ok(sites);
     }
 
-
-    [HttpGet("popular")]
-    public async Task<ActionResult<IEnumerable<SiteBbsInfo>>> GetPopularPosts(int count = 10)
-    {
-        if (count < 1 || count > 50) count = 10;
-
-        var popularPosts = await _context.SiteBbsInfos
-            .Where(x => x.views.HasValue || x.likes.HasValue)
-            .OrderByDescending(x => (x.views ?? 0) + (x.likes ?? 0) * 10)
-            .Take(count)
-            .ToListAsync();
-
-        return Ok(popularPosts);
-    }
-
     [HttpGet("admin/stats")]
     public async Task<ActionResult> GetAdminStats()
     {
@@ -1390,6 +1352,33 @@ public class ShoooqController : ControllerBase
         {
             _logger.LogError(ex, "Error getting latest crawl time");
             return StatusCode(500, new { message = "Internal server error" });
+        }
+    }
+
+    /// <summary>
+    /// 트렌딩 커뮤니티 목록을 조회합니다 (레딧 스타일)
+    /// 최근 24시간 동안 이미지가 있고 좋아요가 20개 이상인 게시물을 기준으로
+    /// 각 사이트의 베스트 포스트를 반환합니다.
+    /// </summary>
+    /// <param name="limit">반환할 커뮤니티 수 (기본값: 6)</param>
+    /// <returns>트렌딩 커뮤니티 목록</returns>
+    [HttpGet("trending-communities")]
+    public async Task<ActionResult> GetTrendingCommunities(int limit = 6)
+    {
+        try
+        {
+            if (limit < 1 || limit > 20) limit = 6;
+
+            _logger.LogInformation("API Call: /api/trending-communities - Parameters: Limit={Limit}", limit);
+
+            var communities = await _shooqService.GetTrendingCommunitiesAsync(limit);
+
+            return Ok(communities);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in GetTrendingCommunities API: {Message}", ex.Message);
+            return StatusCode(500, new { message = "Internal server error", details = ex.Message });
         }
     }
 }
