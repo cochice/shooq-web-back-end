@@ -64,8 +64,11 @@ public class ShooqService
 
         var pageIndex = page - 1;
 
+        // sortBy 정규화
+        var normalizedSortBy = sortBy?.ToLower() ?? "hot";
+
         // 추천순일 때만 기간 필터링 적용
-        var timeInterval = sortBy?.ToLower() == "top" ? (topPeriod?.ToLower() switch
+        var timeInterval = normalizedSortBy == "top" ? (topPeriod?.ToLower() switch
         {
             "today" => "INTERVAL '24 hours'",
             "week" => "INTERVAL '7 days'",
@@ -73,6 +76,21 @@ public class ShooqService
             "all" => "INTERVAL '365 days'", // 전체는 1년으로 제한
             _ => "INTERVAL '24 hours'"
         }) : "INTERVAL '48 hours'";
+
+        // 급상승 일때 적용
+        if (normalizedSortBy == "rising")
+        {
+            timeInterval = "INTERVAL '3 hours'";
+        }
+
+        // ORDER BY 절 결정
+        var orderByClause = normalizedSortBy switch
+        {
+            "new" => "c.posted_dt DESC",
+            "top" => "c.score DESC",
+            "rising" => "c.rising_score DESC, c.posted_dt DESC",
+            _ => "c.time_bucket_no ASC, c.score DESC" // hot (default)
+        };
 
         var sql = $@"
             WITH current_seoul_time AS (
@@ -118,13 +136,7 @@ public class ShooqService
                 c.""no"", c.""number"", c.title, c.author, c.""date"", c.""views"", c.likes,
                 c.url, c.""content"", c.total_count, c.cloudinary_url, c.rising_score
             FROM counted c
-            ORDER BY {(sortBy?.ToLower() switch
-        {
-            "new" => "c.posted_dt DESC",
-            "top" => "c.score DESC",
-            "rising" => "c.rising_score DESC, c.posted_dt DESC",
-            _ => "c.time_bucket_no ASC, c.score DESC"
-        })}
+            ORDER BY {orderByClause}
             OFFSET (@p_page_index * @p_page_count)
             LIMIT @p_page_count
         ";
@@ -139,15 +151,17 @@ public class ShooqService
             p_only_with_media = onlyWithMedia
         };
 
-        _logger.LogInformation("ShooqService.GetPostsAsync - Parameters: Site={site}, Keyword={Keyword}, PageIndex={PageIndex}, PageSize={PageSize}, MaxNo={MaxNo}, SortBy={SortBy}, TopPeriod={TopPeriod}, OnlyWithMedia={OnlyWithMedia}",
+        _logger.LogInformation("ShooqService.GetPostsAsync - Parameters: Site={site}, Keyword={Keyword}, PageIndex={PageIndex}, PageSize={PageSize}, MaxNo={MaxNo}, SortBy={SortBy}, TopPeriod={TopPeriod}, OnlyWithMedia={OnlyWithMedia}, TimeInterval={TimeInterval}, OrderBy={OrderBy}",
             site,
             keyword ?? "NULL",
             pageIndex,
             pageSize,
             maxNo?.ToString() ?? "NULL",
-            sortBy ?? "hot",
+            normalizedSortBy,
             topPeriod ?? "today",
-            onlyWithMedia);
+            onlyWithMedia,
+            timeInterval,
+            orderByClause);
 
         var posts = await connection.QueryAsync<dynamic>(sql, parameters);
         var postsList = posts.ToList();
