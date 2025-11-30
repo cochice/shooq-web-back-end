@@ -104,7 +104,7 @@ public class ShooqService
                 AND (
                         @p_keyword IS NULL OR @p_keyword = ''
                         OR s.title ILIKE '%' || @p_keyword || '%'
-                        OR s.""content"" ILIKE '%' || @p_keyword || '%'
+                        --OR s.""content"" ILIKE '%' || @p_keyword || '%'
                 )
             ),
             counted AS (
