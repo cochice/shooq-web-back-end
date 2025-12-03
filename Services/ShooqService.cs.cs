@@ -83,6 +83,12 @@ public class ShooqService
             timeInterval = "INTERVAL '3 hours'";
         }
 
+        // 최신순 일때 적용
+        if (normalizedSortBy == "new")
+        {
+            timeInterval = "INTERVAL '730 days'";
+        }
+
         // ORDER BY 절 결정
         var orderByClause = normalizedSortBy switch
         {
@@ -99,7 +105,7 @@ public class ShooqService
             filtered AS (
                 SELECT
                     s.""no"", s.""number"", s.title, s.author, s.""date"", s.""views"",
-                    s.likes, s.url, s.site, s.reg_date, s.reply_num, s.""content"", s.posted_dt,
+                    s.likes, s.url, s.site, s.reg_date, s.reply_num, s.""content"", s.posted_dt, s.img2,
                     (
                         {GetScaledScore2}
                     ) AS score,
@@ -134,7 +140,7 @@ public class ShooqService
             SELECT DISTINCT
                 c.score, c.time_bucket_no, c.posted_dt, c.site, c.reg_date, c.reply_num,
                 c.""no"", c.""number"", c.title, c.author, c.""date"", c.""views"", c.likes,
-                c.url, c.""content"", c.total_count, c.cloudinary_url, c.rising_score
+                c.url, c.""content"", c.total_count, c.cloudinary_url, c.rising_score, c.img2
             FROM counted c
             ORDER BY {orderByClause}
             OFFSET (@p_page_index * @p_page_count)
@@ -192,7 +198,8 @@ public class ShooqService
             time_bucket = p.time_bucket,
             time_bucket_no = p.time_bucket_no != null ? (int?)Convert.ToInt32(p.time_bucket_no) : null,
             cloudinary_url = p.cloudinary_url,
-            OptimizedImagesList = imagesResults[index]
+            OptimizedImagesList = imagesResults[index],
+            img2 = p.img2 != null ? (int?)Convert.ToInt32(p.img2) : null
         }).ToList();
 
         return (siteBbsInfos, totalCount);
@@ -323,6 +330,42 @@ public class ShooqService
         }).ToList();
 
         return result;
+    }
+
+    /// <summary>
+    /// 게시물 및 관련 이미지를 삭제합니다 (트랜잭션 처리)
+    /// </summary>
+    public async Task<bool> DeletePostAsync(long no)
+    {
+        var connectionString = Environment.GetEnvironmentVariable("DATABASE_URL") ?? _configuration.GetConnectionString("DefaultConnection");
+        using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+
+        using var transaction = await connection.BeginTransactionAsync();
+        try
+        {
+            // 1. optimized_images 테이블에서 삭제
+            var deleteImagesSql = @"DELETE FROM tmtmfhgi.optimized_images WHERE NO = @p_no";
+            await connection.ExecuteAsync(deleteImagesSql, new { p_no = no }, transaction);
+
+            // 2. site_bbs_info 테이블에서 삭제
+            var deletePostSql = @"DELETE FROM tmtmfhgi.site_bbs_info WHERE ""no"" = @p_no";
+            var affectedRows = await connection.ExecuteAsync(deletePostSql, new { p_no = no }, transaction);
+
+            // 커밋
+            await transaction.CommitAsync();
+
+            _logger.LogInformation("ShooqService.DeletePostAsync - Successfully deleted post with no={No}, AffectedRows={AffectedRows}", no, affectedRows);
+
+            return affectedRows > 0;
+        }
+        catch (Exception ex)
+        {
+            // 롤백
+            await transaction.RollbackAsync();
+            _logger.LogError(ex, "ShooqService.DeletePostAsync - Error deleting post with no={No}", no);
+            throw;
+        }
     }
 }
 

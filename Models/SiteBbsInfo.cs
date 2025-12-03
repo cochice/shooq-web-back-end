@@ -65,6 +65,9 @@ public class SiteBbsInfo
     [Column("cloudinary_url")]
     public string? cloudinary_url { get; set; }
 
+    [Column("img2")]
+    public int? img2 { get; set; }
+
     [Column("img_srcs")]
     public List<OptimizedImages>? OptimizedImagesList { get; set; }
 }

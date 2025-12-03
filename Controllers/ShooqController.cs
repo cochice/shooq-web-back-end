@@ -1381,6 +1381,36 @@ public class ShooqController : ControllerBase
             return StatusCode(500, new { message = "Internal server error", details = ex.Message });
         }
     }
+
+    /// <summary>
+    /// 관리자 - 게시물 및 관련 이미지를 삭제합니다
+    /// </summary>
+    /// <param name="id">게시물 번호</param>
+    /// <returns>삭제 결과</returns>
+    [HttpDelete("admin/bbs-img/{id}")]
+    public async Task<ActionResult> DeletePost(long id)
+    {
+        try
+        {
+            _logger.LogInformation("API Call: DELETE /api/admin/bbs-img/{Id} - Parameters: Id={Id}", id, id);
+
+            var result = await _shooqService.DeletePostAsync(id);
+
+            if (result)
+            {
+                return Ok(new { message = "게시물이 성공적으로 삭제되었습니다.", deletedId = id });
+            }
+            else
+            {
+                return NotFound(new { message = "게시물을 찾을 수 없습니다.", id });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in DeletePost API: {Message}", ex.Message);
+            return StatusCode(500, new { message = "Internal server error", details = ex.Message });
+        }
+    }
 }
 
 public class PagedResult<T>
